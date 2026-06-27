@@ -25,6 +25,10 @@ This skill is the workbox-specific playbook. For the socket primitives (`agent l
 6. **Retire the local source.** Tell the local agent its work has moved to the workbox (or close its pane) so the same work never runs in two places.
 7. **Repeat per target.** The workbox server persists every successor; the human watches them with `herdr --remote <workbox> --session <name>` and detaches without stopping them.
 
+## With Syncthing (live file sync)
+
+If the workbox keeps the project folder live-identical to the laptop (e.g. via Syncthing, as in [backpine/remote-agent-workspace](https://github.com/backpine/remote-agent-workspace)), step 3 simplifies: the repo and the branch's files are already on the box, so skip the clone/fetch. The git branch + issue handoff still earns its place - it carries the *tracked goal* and survives a fresh context and per-machine reauth, neither of which file sync provides. Two agents in the same synced repo still need separate `git worktree`s.
+
 ## Gotchas
 
 - One handoff at a time: let each source finish posting its issue before starting its successor, so you never mix up `{repo, branch, issue}`.
