@@ -32,7 +32,7 @@ Move an agent's work to a fresh agent - a faster machine, a clean context, or a 
 1. **Confirm the source is idle.** A working agent has no stable state to hand off; wait or pick another.
 2. **Make the source write the handoff.** Send it: push its branch, write a handoff document at the repo root, open a GitHub issue whose body is that document, and reply with the issue URL. The document names the branch, the checkpoint commit, and the remaining work. **Done when: the issue URL is posted and the branch is pushed.**
 3. **Isolate the target checkout.** On the target, check out the handoff's branch. If another agent already occupies that repo, give this one its own `git worktree` - never two agents in one working tree.
-4. **Start the successor.** `herdr agent start <name> --cwd <repo> -- <agent-cli>`. For an unattended run add the agent's bypass flag (codex: `--dangerously-bypass-approvals-and-sandbox`); clear the startup trust and hook prompts once it boots.
+4. **Start the successor.** `herdr agent start <name> --cwd <repo> -- <agent-cli>`. For an unattended run add the agent's bypass flag (codex: `--dangerously-bypass-approvals-and-sandbox`); clear the startup trust and hook prompts once it boots. Start it in its **own labeled workspace** (`--workspace`) - one agent per workspace keeps sessions reviewable.
 5. **Hand it the goal.** Give the successor the handoff issue as a *tracked goal*, not a one-shot prompt - e.g. `/goal <objective referencing the issue and branch>`. **Done when: a `read` shows the successor pursuing the goal.**
 
 ## Gotchas
