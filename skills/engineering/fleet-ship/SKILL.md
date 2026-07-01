@@ -17,7 +17,7 @@ it just runs it across many parallel herdr panes instead of one session.
   Interactive `superpowers:brainstorming` interviews the user - only run it when YOU/the user drive it live, never
   in an unattended pane. (Parallel-explore generates options; it does NOT replace the user's decision.)
 - **Build:** `superpowers:subagent-driven-development` (runs `superpowers:test-driven-development` +
-  `superpowers:using-git-worktrees` internally).
+  `superpowers:using-git-worktrees` internally). **Seam discipline:** its `testing-anti-patterns.md` is the authority — mock only non-deterministic *leaves* (model/LLM, clock, net), NEVER the code path the test is named after.
 - **Review:** `/review-all` = `simplify` + `/codex:review` + `/codex:adversarial-review`; plus
   `superpowers:requesting-code-review` / `superpowers:receiving-code-review` for the judgment on findings.
 - **Finish:** `superpowers:verification-before-completion` (gates) → `superpowers:finishing-a-development-branch`
@@ -46,11 +46,14 @@ Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → b
 4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`): PLAN first
    (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) → gates
    (`superpowers:verification-before-completion`: `bun run typecheck` 0, `verify:effect` 0, suites green) →
-   **Run `git add -A && git commit` before STOP, then report; do NOT push/PR/merge** (an uncommitted worktree = UNFINISHED to the waiter; panes are inconsistent about self-committing). Non-Claude panes: bake plan-first + red→green TDD into the brief.
+   **Run `git add -A && git commit` before STOP, then report; do NOT push/PR/merge** (an uncommitted worktree = UNFINISHED to the waiter; panes are inconsistent about self-committing). **Seam rule in every brief:** point the pane at `testing-anti-patterns.md`; a behavior-bearing chunk must assert the *observable effect at the real seam* (e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears), NOT that a mocked dispatch was called. Non-Claude panes: bake plan-first + red→green TDD into the brief.
 5. **Arm waiter.** Background `herdr agent wait <pane> --status idle` (re-arming) → re-invokes you on idle.
-6. **Gate (you, opus).** On idle: read the pane → `/review-all` → `superpowers:receiving-code-review`
-   judgment → one fix subagent for Critical/Important → `superpowers:finishing-a-development-branch` →
-   **squash-merge to main.**
+6. **Gate (you, opus).** On idle: read the pane → `/review-all` → **seam check** (the
+   `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
+   mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
+   code*; a behavior-bearing chunk with only mocked-dispatch tests is NOT done → send back) →
+   `superpowers:receiving-code-review` judgment → one fix subagent for Critical/Important →
+   `superpowers:finishing-a-development-branch` → **squash-merge to main.**
 7. **Track.** Move the kanban card Todo→In Progress→Done; attach the PR.
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn an
    opus `dogfood` pane: run the app, exercise the chunk's new behavior + a core smoke, report → findings
@@ -84,6 +87,14 @@ orchestrator can resume from those alone.
   test file failed to load → 0 tests ran. So (a) name the repo's test framework + matcher set in the brief
   (e.g. "vitest, import from 'vitest', no bun:test/toStartWith"); (b) the orchestrator's gate must
   **actually run the new tests** - typecheck/verify alone pass over a non-loading or wrong-matcher test.
+- **Green != correct — enforce SEAM discipline (define_view dogfood lesson).** A chunk shipped 31 green unit
+  tests yet the feature hung in prod because they **mocked the dispatch (`CreateGoal`) — the behavior under
+  test**; "green" meant "called the mock." The rules already existed (`testing-anti-patterns.md` + both review
+  rubrics ask *"tests verify real behavior, not mocks?"*) — the miss was not wiring them into the fleet. So:
+  (a) every brief names the seam rule + points at `testing-anti-patterns.md`; (b) the gate runs the seam check
+  (delete-the-mock heuristic + task-reviewer rubric) and REJECTS behavior-bearing chunks whose tests mock their
+  own dispatch; (c) such chunks carry a real-seam acceptance assertion (mock only non-deterministic leaves).
+  UAT/dogfood is the backstop, not the primary catch.
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Event-driven, not timed.** `herdr agent wait` background tasks are the notifier; `send_later`/
   `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that

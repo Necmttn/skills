@@ -12,7 +12,11 @@
 > chunk: <ID> - <objective>. You are ALREADY in the isolated worktree on branch <branch> off main; work
 > here. FIRST write a short plan (decompose into tasks, name files+tests, sequence) - opus: use
 > superpowers:writing-plans. THEN build test-first per task (red→green→refactor) - opus: use
-> superpowers:subagent-driven-development. Gates before done: bun run typecheck exits 0, bun run
+> superpowers:subagent-driven-development. SEAM RULE: mock ONLY non-deterministic leaves (model/LLM, clock,
+> net) - NEVER the code path this chunk is named after; if the behavior is user/agent-visible, add one test
+> that asserts the real observable effect (e.g. a goal actually appears) at the real seam, not that a mocked
+> dispatch was called (delete-the-mock heuristic: if the test still passes with the mock removed, it tests
+> nothing). Gates before done: bun run typecheck exits 0, bun run
 > verify:effect 0 errors, the <named> suites green. Keep <invariant, e.g. daemon-mode> unchanged. Then
 > COMMIT your work on the branch as one conventional commit, then STOP and report commit SHAs, a test
 > summary, and any concerns. Do NOT pause to ask how to finish, and do NOT open a PR or push or merge; the
