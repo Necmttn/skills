@@ -27,7 +27,7 @@ Bare idle false-fires: a pane reports idle while *holding on a background shell*
 idle↔working → notification storm. Gate the waiter on a real **commit beyond origin/main** (= chunk done).
 `/tmp/herdr_wait.sh`:
 ```sh
-P="$1"; WT="$2"   # pane id, worktree path (commit-gate)
+P="$1"; WT="$2"   # agent NAME (chunk id; pane id also works), worktree path (commit-gate)
 for i in $(seq 1 160); do
   herdr agent wait "$P" --status idle --timeout 90000 >/dev/null 2>&1   # block efficiently until idle
   if [ -n "$WT" ]; then
@@ -38,7 +38,7 @@ for i in $(seq 1 160); do
 done
 echo "TIMEOUT: $P"; exit 0
 ```
-Run **in the background** per active pane: `bash /tmp/herdr_wait.sh <pane> <worktree>` (run_in_background) →
+Run **in the background** per active pane: `bash /tmp/herdr_wait.sh <name> <worktree>` (run_in_background) →
 it exits only on a real commit → the harness re-invokes the orchestrator → sweep. (Pass the worktree to
 commit-gate; omit it only for doc/spec panes that may legitimately finish with no further commit.)
 
@@ -47,11 +47,11 @@ commit-gate; omit it only for doc/spec panes that may legitimately finish with n
 **Refinement 2 (LIVE define_view run — three failures the commit-only gate can't see):**
 1. **A build pane can finish gated-green but NOT `git commit`.** Codex is *inconsistent*: same brief, some chunks committed, one finished with work staged/modified but uncommitted -> `rev-list origin/main..HEAD` empty forever -> waiter spins to TIMEOUT (~silent 30-40 min), orchestrator never advances. SAME failure as a dogfood pane leaving work uncommitted -- NOT dogfood-specific. **Gate build panes on stable-idle AND (commit OR dirty-working-tree)**: `dirty=$(git -C "$WT" status --porcelain)`. Emit a DISTINCT signal -- `READY` (committed) vs `READY_UNCOMMITTED` (idle+dirty); on the latter the orchestrator commits the pane's work ITSELF (`git add -A && git commit`) before gating. Belt: every brief must say *"run `git add -A && git commit` before you stop -- an uncommitted worktree is treated as UNFINISHED."*
 2. **Panes finish in status `done`, not `idle`.** Codex ends a chunk in `agent_status: done` (terminal), so a waiter gating on `= idle` only loops past a finished pane to TIMEOUT. ALWAYS accept `idle|done` (build AND dogfood waiters).
-3. **`herdr agent wait --status idle` is LEVEL-triggered, not edge-triggered** -- returns in ~5ms if already idle, so `wait -> check -> sleep -> loop` gives zero backpressure (just a sleep-poll). `--status done` is a SEPARATE terminal state an idle pane never satisfies -- not a drop-in for "finished a turn." herdr has **no native turn-finished event/webhook**; the only true edge-trigger is `herdr wait output <pane> --match <sentinel> --regex` (blocks for NEW output) -- optional fast-path if the pane echoes a sentinel last. Otherwise the git-state gate (commit OR dirty) is the authority.
+3. **`herdr agent wait --status idle` is LEVEL-triggered, not edge-triggered** -- returns in ~5ms if already idle, so `wait -> check -> sleep -> loop` gives zero backpressure (just a sleep-poll). `--status done` is a SEPARATE terminal state an idle pane never satisfies -- not a drop-in for "finished a turn." herdr has **no native turn-finished event/webhook**; the only true edge-trigger is `herdr wait output <pane_id> --match <sentinel> --regex` (blocks for NEW output; pane-id ONLY — names rejected, resolve via `agent get <name>`) -- optional fast-path if the pane echoes a sentinel last. Otherwise the git-state gate (commit OR dirty) is the authority.
 
 Corrected canonical build waiter:
 ```sh
-P="$1"; WT="$2"; NAME="$3"
+P="$1"; WT="$2"; NAME="${3:-$1}"   # P = agent name (chunk id); agent wait/get resolve names natively
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 240); do
   herdr agent wait "$P" --status idle --timeout 8000 >/dev/null 2>&1   # level-triggered; backpressure via --timeout
@@ -80,8 +80,8 @@ done
 
 ## Read a pane (JSON → text)
 ```sh
-herdr agent read <pane> --source visible --lines 30 | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["read"]["text"])'
-herdr agent get <pane>   # {agent_status: idle|working|blocked|unknown}
+herdr agent read <name> --source visible --lines 30 | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["read"]["text"])'
+herdr agent get <name>   # {agent_status: idle|working|blocked|done|unknown}; .result.agent.pane_id → pane id for pane-only cmds
 ```
 
 ## Kanban (GitHub Project v2 via gh; needs `project` scope)

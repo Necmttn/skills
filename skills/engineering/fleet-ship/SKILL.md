@@ -40,7 +40,10 @@ Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → b
    **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
    `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
-3. **Spawn, engine-routed:** mechanical → **pigrok** `pi --model xai-oauth/grok-4.3 --approve` or **codex**
+3. **Spawn, engine-routed + NAMED:** `herdr agent start <chunk-id> --cwd <worktree> --workspace <ws-id> -- <engine argv>`
+   — the agent NAME is the kanban chunk id. First `herdr workspace create --label <chunk-id> --cwd <worktree> --no-focus`
+   and use the `workspace_id` from its response, so the human's sidebar shows one labeled workspace per chunk.
+   Engines: mechanical → **pigrok** `pi --model xai-oauth/grok-4.3 --approve` or **codex**
    `codex --dangerously-bypass-approvals-and-sandbox`; judgment/reactor-subtle/design → **opus**
    `claude --model opus --dangerously-skip-permissions`. **ALWAYS pin `--model` explicitly** — a bare `claude`
    inherits the user's CURRENT default, which can change mid-fleet (live lesson: user switched their default to a
@@ -49,7 +52,7 @@ Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → b
    (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) → gates
    (`superpowers:verification-before-completion`: `bun run typecheck` 0, `verify:effect` 0, suites green) →
    **Run `git add -A && git commit` before STOP, then report; do NOT push/PR/merge** (an uncommitted worktree = UNFINISHED to the waiter; panes are inconsistent about self-committing). **Seam rule in every brief:** point the pane at `testing-anti-patterns.md`; a behavior-bearing chunk must assert the *observable effect at the real seam* (e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears), NOT that a mocked dispatch was called. Non-Claude panes: bake plan-first + red→green TDD into the brief.
-5. **Arm waiter.** Background `herdr agent wait <pane> --status idle` (re-arming) → re-invokes you on idle.
+5. **Arm waiter.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on idle.
 6. **Gate (you, opus).** On idle: read the pane → `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
    mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
@@ -79,6 +82,12 @@ orchestrator can resume from those alone.
 ## Hard rules (live-dogfood lessons)
 - **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt
   before `send`; submit is a separate `send-keys Enter`.
+- **Name everything; report by name.** `agent start <chunk-id>` — the name IS the chunk id, unique per fleet
+  (never generic like `codex`: detected labels are also targets → ambiguous). ALL `herdr agent *` commands
+  (get/read/send/wait/rename/focus/attach) accept the NAME as target; address by name everywhere. Pane id is
+  required ONLY for `herdr pane *` (send-keys/run/close) and `herdr wait output|agent-status` — resolve once:
+  `herdr agent get <name> | jq -r .result.agent.pane_id`. REPORTING rule: to the human always say
+  `<name> (<pane_id>)` — e.g. `dv-record-detail (wV:pC)` — never a bare pane id.
 - **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). `herdr agent wait --status idle` is LEVEL-triggered (returns instantly if already idle → no backpressure); herdr has no native turn-finished event. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
 - **Idle != done (background-shell flap).** A pane reports idle/`done` while merely *holding on a background shell* (a test suite,
   a forked review). Gate on a REAL signal: a **commit beyond `origin/main`** + a final report/STOP - not bare
