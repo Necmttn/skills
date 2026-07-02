@@ -27,7 +27,13 @@ it just runs it across many parallel herdr panes instead of one session.
 Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → bake the discipline
 (plan-first, red→green TDD, gates) into their brief text.** The orchestrator (opus) always owns Review + Finish.
 
-## Engine routing (default policy — USER-STEERABLE)
+## Engine routing (default policy — USER-STEERABLE via ~/.ax/fleet-routing.json)
+**At fleet start (and on any steering sentence), read `~/.ax/fleet-routing.json`** — the ax-idiom lane table
+(`{lanes:[{id, match, engine, argv, enabled, reason, origin}]}`). It OVERRIDES the table below; the table is
+the fallback when the file is absent/invalid. Route each chunk to the enabled lane whose `match` best fits;
+skip `enabled:false` lanes. The user edits the file to re-route (e.g. flip judgment→fable) without touching
+this skill; record which lane file version a run used in the ledger. Resolution order:
+**user sentence override (ledger) > ~/.ax/fleet-routing.json > table below.**
 | work class | engine | notes |
 |---|---|---|
 | mechanical (clear spec, schema/validator/wiring, 1-3 files) | **codex** `codex --dangerously-bypass-approvals-and-sandbox` | reads CLAUDE.md, cleanest fast lane (live evidence) |
