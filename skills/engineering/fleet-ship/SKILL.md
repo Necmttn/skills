@@ -96,6 +96,12 @@ orchestrator can resume from those alone.
   sessions — NEVER spawn fleet panes there or into whatever tab has focus. Create ONE `fleet:<epic>` tab per
   run (`herdr tab create --workspace <ws> --label "fleet:<epic>" --no-focus`) and spawn all chunk panes into
   it (`agent start ... --tab <tab_id>`); close or rename the tab (`fleet:<epic> ✓done`) when the run ends.
+  **Retrofit/moves (dogfooded on a LIVE working codex pane — survives untouched):** `herdr pane move <pane_id>
+  --tab <tab_id>` (existing tab) / `--new-tab --workspace <ws> --label TEXT` / `--new-workspace --label TEXT
+  --tab-label TEXT` (creates workspace+tab+moves in one command; use `--no-focus`). CRITICAL: the pane_id
+  CHANGES on move (wV:pC → w0:p1) but the agent NAME resolves seamlessly across it — one more reason waiters
+  and every reference must target the NAME; any pane-id-addressed waiter dies silently on a move (re-arm by
+  name).
 - **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). `herdr agent wait --status idle` is LEVEL-triggered (returns instantly if already idle → no backpressure); herdr has no native turn-finished event. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
 - **Idle != done (background-shell flap).** A pane reports idle/`done` while merely *holding on a background shell* (a test suite,
   a forked review). Gate on a REAL signal: a **commit beyond `origin/main`** + a final report/STOP - not bare
