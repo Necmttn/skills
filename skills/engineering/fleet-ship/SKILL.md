@@ -27,6 +27,19 @@ it just runs it across many parallel herdr panes instead of one session.
 Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → bake the discipline
 (plan-first, red→green TDD, gates) into their brief text.** The orchestrator (opus) always owns Review + Finish.
 
+## Engine routing (default policy — USER-STEERABLE)
+| work class | engine | notes |
+|---|---|---|
+| mechanical (clear spec, schema/validator/wiring, 1-3 files) | **codex** `codex --dangerously-bypass-approvals-and-sandbox` | reads CLAUDE.md, cleanest fast lane (live evidence) |
+| burst overflow only (codex lane saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
+| judgment / reactor-subtle / security / design / UX | **opus** `claude --model opus --dangerously-skip-permissions` | always pin `--model` |
+| review + gate + merge | orchestrator (opus) | never delegated |
+
+**Steering:** the user can override routing at ANY time with one sentence ("route all mechanical to codex",
+"no pigrok this run", "everything on opus tonight"). Apply it for the remainder of the run, write the active
+override into the run ledger (so a resumed orchestrator keeps honoring it), and ask once whether to persist
+it into this table as the new default.
+
 ## Setup (once)
 1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
    (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
@@ -46,11 +59,10 @@ Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → b
    (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label "fleet:<epic>"
    --no-focus` (e.g. `fleet:define-view`), keep its `tab_id`, and spawn EVERY chunk pane with `--tab <tab_id>`.
    The human's sidebar then reads: space → `fleet:<epic>` tab → named chunk panes. `herdr tab rename` retrofits.
-   Engines: mechanical → **pigrok** `pi --model xai-oauth/grok-4.3 --approve` or **codex**
-   `codex --dangerously-bypass-approvals-and-sandbox`; judgment/reactor-subtle/design → **opus**
-   `claude --model opus --dangerously-skip-permissions`. **ALWAYS pin `--model` explicitly** — a bare `claude`
-   inherits the user's CURRENT default, which can change mid-fleet (live lesson: user switched their default to a
-   new model and the next spawned pane silently ran on it; caught only by reading the pane status line).
+   Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
+   **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
+   mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
+   only by reading the pane status line).
 4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`): PLAN first
    (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) → gates
    (`superpowers:verification-before-completion`: `bun run typecheck` 0, `verify:effect` 0, suites green) →
