@@ -3,15 +3,19 @@
 ## Engine lanes
 | Lane | CLI (unattended) | Use | herdr tracks status? |
 |---|---|---|---|
-| pigrok (Grok-4.3, fast/cheap) | `pi --model xai-oauth/grok-4.3 --approve` | mechanical build | verify on first spawn; fall back to codex if not |
-| codex (GPT-5) | `codex --dangerously-bypass-approvals-and-sandbox` | mechanical build + `/codex:review` | yes |
-| opus (Claude) | `claude --dangerously-skip-permissions` | orchestrator, judgment, reactor-subtle, dogfood | yes |
+| codex (gpt-5.5) | `codex --dangerously-bypass-approvals-and-sandbox` | mechanical build (effectively free) + `codex review` extra review perspective | yes |
+| pigrok (Grok-4.3) | `pi --model xai-oauth/grok-4.3 --approve` | burst overflow only (codex saturated) | verify on first spawn; fall back to codex if not |
+| fable (Claude) | `claude --model fable --dangerously-skip-permissions` | orchestrator, judgment, user-facing (UI/copy/API design), review, dogfood | yes |
+| opus (Claude) | `claude --model opus --dangerously-skip-permissions` | fallback for fable lane; review co-owner | yes |
+| sonnet (Claude) | `claude --model sonnet --dangerously-skip-permissions` | taste-floor user-facing work when fable/opus lanes busy; thin codex-exec wrapper in subagents | yes |
+
+Never Haiku. Always pin `--model` on claude panes. Escalation: gate failure on a cheaper lane = re-spawn same worktree on smarter lane, no asking (intelligence > taste > cost).
 
 ## Build-pane brief template (one line - no newlines/apostrophes; send + `send-keys Enter`)
 > Act as a focused implementer for ONE chunk. Read <goal-brief path> (ship-style + chunk specs). Your
 > chunk: <ID> - <objective>. You are ALREADY in the isolated worktree on branch <branch> off main; work
-> here. FIRST write a short plan (decompose into tasks, name files+tests, sequence) - opus: use
-> superpowers:writing-plans. THEN build test-first per task (red→green→refactor) - opus: use
+> here. FIRST write a short plan (decompose into tasks, name files+tests, sequence) - claude panes: use
+> superpowers:writing-plans. THEN build test-first per task (red→green→refactor) - claude panes: use
 > superpowers:subagent-driven-development. SEAM RULE: mock ONLY non-deterministic leaves (model/LLM, clock,
 > net) - NEVER the code path this chunk is named after; if the behavior is user/agent-visible, add one test
 > that asserts the real observable effect (e.g. a goal actually appears) at the real seam, not that a mocked
@@ -82,6 +86,21 @@ done
 ```sh
 herdr agent read <name> --source visible --lines 30 | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["read"]["text"])'
 herdr agent get <name>   # {agent_status: idle|working|blocked|done|unknown}; .result.agent.pane_id → pane id for pane-only cmds
+
+## Archive a pane result before close (housekeeping)
+```sh
+# 1. capture (name-addressed) → the git-tracked run archive
+mkdir -p docs/superpowers/fleet-runs
+{ echo "## $NAME"; echo "PR #$PR · $COMMIT · gate: $VERDICT"; echo;
+  herdr agent read "$NAME" --source recent --lines 400 \
+    | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])'; echo;
+} >> "docs/superpowers/fleet-runs/$EPIC.md"
+git add "docs/superpowers/fleet-runs/$EPIC.md" && git commit -m "chore(fleet): archive $NAME result"
+# 2. THEN teardown
+PID=$(herdr agent get "$NAME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["pane_id"])')
+herdr pane close "$PID"; git worktree remove .claude/worktrees/$NAME --force; git branch -D feat/$NAME
+```
+Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) or `herdr session attach $NAME` (live, while it persists).
 ```
 
 ## Kanban (GitHub Project v2 via gh; needs `project` scope)

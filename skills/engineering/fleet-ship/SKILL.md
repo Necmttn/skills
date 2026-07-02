@@ -1,11 +1,11 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→pigrok/codex, judgment+review→opus), each chunk plan→TDD→review→merge, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5, judgment→fable-5, review→fable-5/opus-4.8), each chunk plan→TDD→review→merge, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
 ---
 
 # Fleet Ship - parallel herdr orchestration
 
-You are the **orchestrator** (run on opus). Panes do the building; you plan the waves, route engines,
+You are the **orchestrator** (run on fable-5 or opus-4.8). Panes do the building; you plan the waves, route engines,
 gate reviews, merge, track on a kanban, and dogfood. This skill *composes* our normal ship workflow -
 it just runs it across many parallel herdr panes instead of one session.
 
@@ -24,22 +24,47 @@ it just runs it across many parallel herdr panes instead of one session.
   (PR) → orchestrator merges → `commit` conventions.
 - **Dogfood:** `dogfood` (+ `verify` / `run` to launch the app).
 
-Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → bake the discipline
-(plan-first, red→green TDD, gates) into their brief text.** The orchestrator (opus) always owns Review + Finish.
+Claude panes (fable/opus/sonnet) invoke these directly. **pigrok/codex panes lack the Skill tool → bake the discipline
+(plan-first, red→green TDD, gates) into their brief text.** The orchestrator (fable/opus) always owns Review + Finish.
+
+## Model axes (rankings, higher = better; cost = what the user actually pays, not list price)
+Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX, code quality, API design, copy.
+| model | cost | intelligence | taste | how to run |
+|---|---|---|---|---|
+| gpt-5.5 | 9 | 8 | 5 | Codex CLI ONLY - `codex exec` / `codex review` (`~/.codex/config.toml` defaults to gpt-5.5); herdr pane = codex argv below |
+| sonnet-5 | 5 | 5 | 7 | `claude --model sonnet` / Agent `model:'sonnet'` |
+| opus-4.8 | 4 | 7 | 8 | `claude --model opus` / Agent `model:'opus'` |
+| fable-5 | 2 | 9 | 9 | `claude --model fable` / Agent `model:'fable'` |
+
+**How to apply (defaults, NOT limits):**
+- **Standing permission to escalate:** cheaper model's output doesn't meet the bar / fails the gate ->
+  re-run or re-spawn the chunk on a smarter model in the SAME worktree, without asking. Judge the output,
+  not the price tag. Escalating costs less than shipping mediocre work.
+- **Cost is a tie-breaker only.** Anything that ships: **intelligence > taste > cost**.
+- **Bulk/mechanical** (clear-spec implementation, data analysis, migrations) -> gpt-5.5, effectively free.
+- **User-facing** (UI, copy, API design) needs **taste >= 7** -> sonnet-5/opus-4.8/fable-5, never gpt-5.5 solo.
+- **Reviews of plans/implementations** -> fable-5 or opus-4.8, optionally gpt-5.5 (`codex review`) as an
+  extra independent perspective (`/review-all` already includes it).
+- **NEVER use Haiku.**
+- **gpt-5.5 inside subagents/Workflows** (the `model` param takes Claude models only): thin Claude wrapper
+  agent `model:'sonnet', effort:'low'` whose prompt writes a self-contained codex prompt, runs `codex exec`
+  via Bash, and returns the result; investigation/data-analysis -> `codex exec -s read-only` with a
+  self-contained prompt. In herdr panes skip the wrapper - spawn the codex CLI directly.
 
 ## Engine routing (default policy — USER-STEERABLE via ~/.ax/fleet-routing.json)
 **At fleet start (and on any steering sentence), read `~/.ax/fleet-routing.json`** — the ax-idiom lane table
 (`{lanes:[{id, match, engine, argv, enabled, reason, origin}]}`). It OVERRIDES the table below; the table is
 the fallback when the file is absent/invalid. Route each chunk to the enabled lane whose `match` best fits;
-skip `enabled:false` lanes. The user edits the file to re-route (e.g. flip judgment→fable) without touching
+skip `enabled:false` lanes. The user edits the file to re-route (e.g. flip judgment→opus) without touching
 this skill; record which lane file version a run used in the ledger. Resolution order:
 **user sentence override (ledger) > ~/.ax/fleet-routing.json > table below.**
 | work class | engine | notes |
 |---|---|---|
-| mechanical (clear spec, schema/validator/wiring, 1-3 files) | **codex** `codex --dangerously-bypass-approvals-and-sandbox` | reads CLAUDE.md, cleanest fast lane (live evidence) |
+| mechanical (clear spec, schema/validator/wiring, 1-3 files, migrations, data analysis) | **codex / gpt-5.5** `codex --dangerously-bypass-approvals-and-sandbox` | effectively free (cost 9, int 8); reads CLAUDE.md, cleanest fast lane (live evidence) |
 | burst overflow only (codex lane saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
-| judgment / reactor-subtle / security / design / UX | **opus** `claude --model opus --dangerously-skip-permissions` | always pin `--model` |
-| review + gate + merge | orchestrator (opus) | never delegated |
+| judgment / reactor-subtle / security / hard-unsupervised | **fable-5** `claude --model fable --dangerously-skip-permissions` (fallback opus-4.8) | int 9; always pin `--model` |
+| user-facing: UI / copy / API design | **fable-5 or opus-4.8** (taste ≥ 7) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor |
+| review + gate + merge | orchestrator (fable-5 or opus-4.8) + `codex review` as extra independent perspective | never delegated |
 
 **Steering:** the user can override routing at ANY time with one sentence ("route all mechanical to codex",
 "no pigrok this run", "everything on opus tonight"). Apply it for the remainder of the run, write the active
@@ -74,17 +99,27 @@ it into this table as the new default.
    (`superpowers:verification-before-completion`: `bun run typecheck` 0, `verify:effect` 0, suites green) →
    **Run `git add -A && git commit` before STOP, then report; do NOT push/PR/merge** (an uncommitted worktree = UNFINISHED to the waiter; panes are inconsistent about self-committing). **Seam rule in every brief:** point the pane at `testing-anti-patterns.md`; a behavior-bearing chunk must assert the *observable effect at the real seam* (e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears), NOT that a mocked dispatch was called. Non-Claude panes: bake plan-first + red→green TDD into the brief.
 5. **Arm waiter.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on idle.
-6. **Gate (you, opus).** On idle: read the pane → `/review-all` → **seam check** (the
+6. **Gate (you, fable/opus).** On idle: read the pane → `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
    mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
    code*; a behavior-bearing chunk with only mocked-dispatch tests is NOT done → send back) →
    `superpowers:receiving-code-review` judgment → one fix subagent for Critical/Important →
    `superpowers:finishing-a-development-branch` → **squash-merge to main.**
-7. **Track.** Move the kanban card Todo→In Progress→Done; attach the PR.
-8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn an
-   opus `dogfood` pane: run the app, exercise the chunk's new behavior + a core smoke, report → findings
+7. **Track + housekeep.** Move the kanban card Todo→In Progress→Done; attach the PR; then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
+8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
+   fable/opus `dogfood` pane: run the app, exercise the chunk's new behavior + a core smoke, report → findings
    become **new kanban cards** linked to the chunk.
 9. **Fan out.** Spawn the next wave's *independent* chunks in parallel; sequence shared-file/reactor chunks.
+
+## Housekeeping — close done panes, KEEP their results (restorable)
+A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcript export; only the *session* persists, and even that is not guaranteed re-attachable after close). So **capture before you close**, into a git-tracked run archive — the durable, restorable record of what each agent actually did.
+
+Per chunk, right after merge (step 7), BEFORE closing:
+1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
+2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
+3. **THEN teardown:** `herdr pane close <pane_id>` (resolve id from the name) → `git worktree remove` → `git branch -D`. Last chunk of the run: `herdr tab rename <fleet-tab> "fleet:<epic> ✓done"` (or close it).
+4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority), or `herdr session attach <name>` for a live re-entry WHILE the session still persists.
+Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
 
 ## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
 Your state lives in the **ledger + kanban + git**, NOT your context. So you survive compaction and a fresh
@@ -138,12 +173,13 @@ orchestrator can resume from those alone.
   (delete-the-mock heuristic + task-reviewer rubric) and REJECTS behavior-bearing chunks whose tests mock their
   own dispatch; (c) such chunks carry a real-seam acceptance assertion (mock only non-deterministic leaves).
   UAT/dogfood is the backstop, not the primary catch.
+- **Never close a pane before archiving its result.** `close` is where the transcript dies (no herdr export; session-attach not guaranteed post-close). Capture `agent read --source recent` → the git-tracked run archive (`docs/superpowers/fleet-runs/<epic>.md`) FIRST, then close. The archive — not the live pane — is the restorable record.
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Event-driven, not timed.** `herdr agent wait` background tasks are the notifier; `send_later`/
   `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that
   chunk back to one it can (codex/claude). **Engines run out of credits/quota mid-run** (grok hit a
   `403: run out of credits`, pane frozen) - detect via a pane read, close the dead pane, and re-spawn the
-  chunk on a fallback engine (grok→codex→opus) in the SAME already-installed worktree. Keep >1 lane funded.
+  chunk on a fallback engine (grok→codex→fable/opus, ascending intelligence) in the SAME already-installed worktree. Keep >1 lane funded.
 - **Parallelize only within a wave where chunks don't share files.** **Verify "already done" claims**
   against current code before building (recent merges shift things).
 
