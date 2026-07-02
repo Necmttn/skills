@@ -90,6 +90,11 @@ it into this table as the new default.
    (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label "fleet:<epic>"
    --no-focus` (e.g. `fleet:define-view`), keep its `tab_id`, and spawn EVERY chunk pane with `--tab <tab_id>`.
    The human's sidebar then reads: space → `fleet:<epic>` tab → named chunk panes. `herdr tab rename` retrofits.
+   **Tab hygiene (live lesson - user caught both):** (a) `herdr tab list --workspace <ws>` BEFORE creating -
+   reuse an existing `fleet:<epic>` tab instead of minting a duplicate; (b) `tab create` ships an empty root
+   SHELL pane (`result.root_pane` in the create response) - after the first chunk pane spawns into the tab,
+   `herdr pane close <root_pane_id>`, and sweep with `herdr pane list --workspace <ws>` (no stray `shell`
+   panes in fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
    Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
    **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
    mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught

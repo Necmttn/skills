@@ -22,6 +22,10 @@ Every pane lives in a workspace, and workspaces belong to projects. Starting a p
 3. Pass it explicitly: `herdr agent start <name> --cwd <path> --workspace <ID> -- <argv>`.
 4. No matching workspace (new project, or an agent that needs isolation per the handoff flow)? Start one with a fresh label instead of squatting in an unrelated project's workspace.
 
+When a tab is involved, two more rules:
+- **Reuse before create:** `herdr tab list --workspace <ws>` first - if a tab with your label already exists, spawn into it (`--tab <id>`). Blind `tab create` breeds duplicate tabs.
+- **Kill the root shell:** `tab create` always ships an empty root SHELL pane (its `pane_id` is in the create response as `result.root_pane`). After you spawn your agent pane into the tab, `herdr pane close <root_pane_id>` - otherwise every tab you create carries a dead empty pane the human has to look at. Verify with `herdr pane list --workspace <ws>`: no `shell` panes left in tabs you manage.
+
 **Done when: the started pane's `workspace_id` in the start response matches the project you intended.** If it doesn't, `herdr pane close <pane>` and restart with the right `--workspace` - panes are cheap, misfiled sessions are not.
 
 ## Drive an agent
