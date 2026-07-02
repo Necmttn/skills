@@ -1,15 +1,35 @@
 # Fleet Ship - Reference
 
 ## Engine lanes
+**Live routing config: [`fleet-routing.json`](fleet-routing.json) in THIS skill dir** — the canonical lane
+table the orchestrator reads at fleet start (symlinked from `~/.ax/fleet-routing.json`, which is the path
+SKILL.md names; edit either, same file). The table below is the narrative companion; the JSON wins.
+
 | Lane | CLI (unattended) | Use | herdr tracks status? |
 |---|---|---|---|
 | codex (gpt-5.5) | `codex --dangerously-bypass-approvals-and-sandbox` | mechanical build (effectively free) + `codex review` extra review perspective | yes |
+| codex-spark (gpt-5.3-codex-spark) | `codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.3-codex-spark` | SMALL well-defined mechanical (crisp spec, 1-3 files, renames/mop-ups/precise edits); 1000+ tok/s on Cerebras, near-instant | yes |
+| codex fast-mode | `codex --dangerously-bypass-approvals-and-sandbox -c 'service_tier="fast"' -c features.fast_mode=true` | critical-path mechanical needing FULL gpt-5.5 capability + speed; 1.5x speed at **2.5x credit burn** — per chunk only, never bulk | yes |
 | pigrok (Grok-4.3) | `pi --model xai-oauth/grok-4.3 --approve` | burst overflow only (codex saturated) | verify on first spawn; fall back to codex if not |
 | fable (Claude) | `claude --model fable --dangerously-skip-permissions` | orchestrator, judgment, user-facing (UI/copy/API design), review, dogfood | yes |
 | opus (Claude) | `claude --model opus --dangerously-skip-permissions` | fallback for fable lane; review co-owner | yes |
+| opus fast-mode | `claude --model opus --settings '{"fastMode": true}' --dangerously-skip-permissions` | critical-path judgment chunk where latency beats cost; billed higher while active | yes |
 | sonnet (Claude) | `claude --model sonnet --dangerously-skip-permissions` | taste-floor user-facing work when fable/opus lanes busy; thin codex-exec wrapper in subagents | yes |
 
 Never Haiku. Always pin `--model` on claude panes. Escalation: gate failure on a cheaper lane = re-spawn same worktree on smarter lane, no asking (intelligence > taste > cost).
+
+**Fast-lane mechanics (verified live 2026-07-02):**
+- **Claude:** NO `--fast` CLI flag exists. Launch opt-in = `--settings '{"fastMode": true}'` (the `flagSettings`
+  source is the exact check in the binary, and the only path that works headless/SDK). Opus 4.8/4.7 only —
+  no effect on fable/sonnet panes. Org allowlist + overage/cooldown can silently drop fast mode mid-run.
+  In-session toggle: `/fast`. Kill-switch env: `CLAUDE_CODE_DISABLE_FAST_MODE`.
+- **Codex fast mode:** persistent form is `service_tier = "fast"` + `[features] fast_mode = true` in
+  `~/.codex/config.toml` (don't — flips every codex run); per-pane `-c` overrides above. Post-launch fallback
+  for TUI panes: send `/fast on` + separate `send-keys Enter`; `codex exec` panes have no slash commands →
+  `-c` at launch is the ONLY way. ChatGPT sign-in only; API-key auth ignores it (bills standard API pricing).
+- **Spark:** research-preview (Pro) — access can vanish; on model-not-found fall back to the plain codex lane.
+  Smaller model (above gpt-5.1-codex-mini, below full gpt-5.5-codex): gate HARD, escalate on any ambiguity.
+  Docs: https://developers.openai.com/codex/speed
 
 ## Build-pane brief template (one line - no newlines/apostrophes; send + `send-keys Enter`)
 > Act as a focused implementer for ONE chunk. Read <goal-brief path> (ship-style + chunk specs). Your

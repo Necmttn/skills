@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "comment": "fleet-ship engine routing - edit lanes freely; the orchestrator reads this at fleet start and on any steering sentence. Resolution order: user sentence override (run ledger) > this file > the skill's built-in table.",
+  "lanes": [
+    {
+      "id": "mechanical",
+      "match": "clear spec, schema/validator/wiring, 1-3 files, mechanical sweeps",
+      "engine": "codex",
+      "argv": "codex --dangerously-bypass-approvals-and-sandbox",
+      "enabled": true,
+      "reason": "reads CLAUDE.md, cleanest fast lane (live evidence)",
+      "origin": "user 2026-07-02: route all mechanical to codex"
+    },
+    {
+      "id": "judgment",
+      "match": "reactor-subtle, security-critical, multi-file design, seam-critical",
+      "engine": "opus",
+      "argv": "claude --model opus --dangerously-skip-permissions",
+      "enabled": true,
+      "reason": "deep-judgment lane; always pin --model",
+      "origin": "default"
+    },
+    {
+      "id": "frontier",
+      "match": "design/UX composition, novel features, frontier-quality wanted",
+      "engine": "fable",
+      "argv": "claude --model fable --dangerously-skip-permissions",
+      "enabled": true,
+      "reason": "Fable 5 - newest flagship; flip 'judgment' work here by editing match/engine",
+      "origin": "user 2026-07-02: fable now available"
+    },
+    {
+      "id": "mechanical-spark",
+      "match": "small well-defined mechanical: crisp spec, 1-3 files, renames/mop-ups/wiring/precise edits; near-instant iteration wanted",
+      "engine": "codex-spark",
+      "argv": "codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.3-codex-spark",
+      "enabled": true,
+      "reason": "gpt-5.3-codex-spark on Cerebras: 1000+ tok/s, verified live on this account 2026-07-02 (Pro research preview). Smaller model - above gpt-5.1-codex-mini, below full gpt-5.5-codex; gate HARD, escalate to mechanical lane on any ambiguity. Preview access can vanish - on model-not-found fall back to mechanical lane",
+      "origin": "user 2026-07-02: spark for well-defined mechanical tasks"
+    },
+    {
+      "id": "mechanical-fast",
+      "match": "critical-path mechanical chunk blocking the wave; latency matters more than credits",
+      "engine": "codex",
+      "argv": "codex --dangerously-bypass-approvals-and-sandbox -c service_tier=\"fast\" -c features.fast_mode=true",
+      "enabled": true,
+      "reason": "codex fast mode: 1.5x speed at 2.5x credit burn (gpt-5.5) - NOT free; opt in per chunk, never bulk. ChatGPT sign-in only (API key ignores it). Post-launch fallback for TUI panes: send '/fast on' + Enter",
+      "origin": "user 2026-07-02: add fast-lane variants"
+    },
+    {
+      "id": "judgment-fast",
+      "match": "critical-path judgment chunk blocking the wave; latency matters more than cost",
+      "engine": "opus",
+      "argv": "claude --model opus --settings '{\"fastMode\": true}' --dangerously-skip-permissions",
+      "enabled": true,
+      "reason": "Claude fast mode via --settings flagSettings (no --fast CLI flag exists); opus 4.8/4.7 only - no effect on fable/sonnet; billed higher while active; org allowlist + overage/cooldown can silently drop it",
+      "origin": "user 2026-07-02: add fast-lane variants"
+    },
+    {
+      "id": "overflow",
+      "match": "burst parallelism only, when codex lane saturated",
+      "engine": "pigrok",
+      "argv": "pi --model xai-oauth/grok-4.3 --approve",
+      "enabled": false,
+      "reason": "convention mop-ups (bun:test/catchAll) + credit risk; gate hard",
+      "origin": "demoted 2026-07-02"
+    },
+    {
+      "id": "gate",
+      "match": "review + gate + merge",
+      "engine": "orchestrator",
+      "argv": null,
+      "enabled": true,
+      "reason": "never delegated",
+      "origin": "default"
+    }
+  ]
+}
