@@ -42,7 +42,9 @@ Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → b
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
 3. **Spawn, engine-routed:** mechanical → **pigrok** `pi --model xai-oauth/grok-4.3 --approve` or **codex**
    `codex --dangerously-bypass-approvals-and-sandbox`; judgment/reactor-subtle/design → **opus**
-   `claude --dangerously-skip-permissions`.
+   `claude --model opus --dangerously-skip-permissions`. **ALWAYS pin `--model` explicitly** — a bare `claude`
+   inherits the user's CURRENT default, which can change mid-fleet (live lesson: user switched their default to a
+   new model and the next spawned pane silently ran on it; caught only by reading the pane status line).
 4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`): PLAN first
    (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) → gates
    (`superpowers:verification-before-completion`: `bun run typecheck` 0, `verify:effect` 0, suites green) →
