@@ -183,3 +183,6 @@ Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
    Blocked? read the blocker, unblock.
 3. Re-arm waiters for still-working panes; spawn next-wave independent chunks (engine-routed).
 4. Update the ledger (`.superpowers/sdd/…progress.md`) - survives compaction; trust it + `git log` over memory.
+
+## Vitest pool on this box
+Do NOT pass `--pool=threads --poolOptions.threads.singleThread` to force worker-spawn under EAGAIN — it DISABLES vitest isolation, so jsdom/global state leaks across files and web suites throw false `found multiple elements` failures (verified on unmodified main). Use the DEFAULT run (isolated forks). If the box is EAGAIN-starved, reduce concurrency (fewer live panes) rather than singleThread.
