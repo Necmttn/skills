@@ -31,7 +31,40 @@ Never Haiku. Always pin `--model` on claude panes. Escalation: gate failure on a
   Smaller model (above gpt-5.1-codex-mini, below full gpt-5.5-codex): gate HARD, escalate on any ambiguity.
   Docs: https://developers.openai.com/codex/speed
 
+## Pane briefs = CONTEXT section + DISCIPLINE BLOCK
+Every brief has two parts. The **CONTEXT section** varies per chunk (spec, bug + repro, files, constraints,
+preferred fix, invariants) - write it as richly as the chunk deserves. The **DISCIPLINE BLOCK** is FIXED -
+copy the matching variant below verbatim onto the end of EVERY brief, whatever the chunk shape (build, bug
+fix, refactor, spike). Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context and even a
+TDD sentence, but never told the pane to plan first or use subagent-driven development - the pane ran
+unstructured. Rich context does not substitute for the block; the block is what makes panes run the chain.
+
+### Discipline block - Claude panes (fable/opus/sonnet; they have the Skill tool - name the skills)
+> WORKFLOW (mandatory): FIRST invoke superpowers:writing-plans and write a short plan (decompose into tasks,
+> name files+tests, sequence). THEN build with superpowers:subagent-driven-development - strict TDD per task,
+> failing test FIRST (red), then green, then refactor. SEAM RULE (superpowers testing-anti-patterns.md): mock
+> ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named after; add
+> one test asserting the real observable effect at the real seam, not that a mocked dispatch was called
+> (delete-the-mock heuristic). GATES before done (superpowers:verification-before-completion): <repo gates,
+> e.g. bun run typecheck 0, bun run verify:effect 0, named suites green>. Then run git add -A && git commit
+> (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA +
+> test summary + concerns. Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the
+> orchestrator owns review + merge.
+
+### Discipline block - non-Claude panes (codex/pi; no Skill tool - same discipline spelled out)
+> WORKFLOW (mandatory): FIRST write a short plan before touching code (decompose into tasks, name files+tests,
+> sequence). THEN strict TDD per task: write the failing test FIRST (<repo test framework note, e.g. vitest -
+> import from "vitest", NO bun:test, no toStartWith>), run it and see it fail, make it pass, refactor. SEAM
+> RULE: mock ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named
+> after; add one test asserting the real observable effect at the real seam, not that a mocked dispatch was
+> called (if the test still passes with the mock removed, it tests nothing). Read CLAUDE.md for repo
+> conventions. GATES before done: <repo gates>. Then run git add -A && git commit (one conventional commit;
+> an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA + test summary + concerns.
+> Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge.
+
 ## Build-pane brief template (one line - no newlines/apostrophes; send + `send-keys Enter`)
+Example of CONTEXT + block fused for a standard build chunk; for other shapes (bug fix, refactor) write your
+own context and append the block above.
 > Act as a focused implementer for ONE chunk. Read <goal-brief path> (ship-style + chunk specs). Your
 > chunk: <ID> - <objective>. You are ALREADY in the isolated worktree on branch <branch> off main; work
 > here. FIRST write a short plan (decompose into tasks, name files+tests, sequence) - claude panes: use

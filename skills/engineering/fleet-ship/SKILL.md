@@ -99,10 +99,19 @@ it into this table as the new default.
    **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
    mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
    only by reading the pane status line).
-4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`): PLAN first
-   (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) → gates
-   (`superpowers:verification-before-completion`: `bun run typecheck` 0, `verify:effect` 0, suites green) →
-   **Run `git add -A && git commit` before STOP, then report; do NOT push/PR/merge** (an uncommitted worktree = UNFINISHED to the waiter; panes are inconsistent about self-committing). **Seam rule in every brief:** point the pane at `testing-anti-patterns.md`; a behavior-bearing chunk must assert the *observable effect at the real seam* (e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears), NOT that a mocked dispatch was called. Non-Claude panes: bake plan-first + red→green TDD into the brief.
+4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`). A brief = **CONTEXT section
+   (varies per chunk: spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
+   (fixed — copy it VERBATIM from REFERENCE.md, never freehand it)**. The block carries the whole chain:
+   PLAN first (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) →
+   seam rule (point at `testing-anti-patterns.md`; a behavior-bearing chunk asserts the *observable effect
+   at the real seam*, e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears — NOT that a
+   mocked dispatch was called) → gates (`superpowers:verification-before-completion`: `bun run typecheck` 0,
+   `verify:effect` 0, suites green) → **`git add -A && git commit` before STOP, then report; do NOT
+   push/PR/merge** (uncommitted worktree = UNFINISHED to the waiter). Claude panes get the skill NAMES (they
+   have the Skill tool); codex/pi panes get the non-Claude variant with the discipline spelled out as text.
+   **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
+   told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
+   shape (build, bug fix, refactor, spike) ends with the verbatim block.**
 5. **Arm waiter.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on idle.
 6. **Gate (you, fable/opus).** On idle: read the pane → `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
