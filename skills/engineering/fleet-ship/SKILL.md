@@ -40,9 +40,12 @@ Opus panes invoke these directly. **pigrok/codex panes lack the Skill tool → b
    **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
    `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
-3. **Spawn, engine-routed + NAMED:** `herdr agent start <chunk-id> --cwd <worktree> --workspace <ws-id> -- <engine argv>`
-   — the agent NAME is the kanban chunk id. First `herdr workspace create --label <chunk-id> --cwd <worktree> --no-focus`
-   and use the `workspace_id` from its response, so the human's sidebar shows one labeled workspace per chunk.
+3. **Spawn, engine-routed + NAMED, into the FLEET TAB:** `herdr agent start <chunk-id> --cwd <worktree> --tab <fleet-tab-id> -- <engine argv>`
+   — the agent NAME is the kanban chunk id. Placement hierarchy (once per fleet run, not per chunk):
+   **workspace = the project/space** (existing, human-labeled) → **tab 1 = the human's interactive sessions
+   (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label "fleet:<epic>"
+   --no-focus` (e.g. `fleet:define-view`), keep its `tab_id`, and spawn EVERY chunk pane with `--tab <tab_id>`.
+   The human's sidebar then reads: space → `fleet:<epic>` tab → named chunk panes. `herdr tab rename` retrofits.
    Engines: mechanical → **pigrok** `pi --model xai-oauth/grok-4.3 --approve` or **codex**
    `codex --dangerously-bypass-approvals-and-sandbox`; judgment/reactor-subtle/design → **opus**
    `claude --model opus --dangerously-skip-permissions`. **ALWAYS pin `--model` explicitly** — a bare `claude`
@@ -88,6 +91,11 @@ orchestrator can resume from those alone.
   required ONLY for `herdr pane *` (send-keys/run/close) and `herdr wait output|agent-status` — resolve once:
   `herdr agent get <name> | jq -r .result.agent.pane_id`. REPORTING rule: to the human always say
   `<name> (<pane_id>)` — e.g. `dv-record-detail (wV:pC)` — never a bare pane id.
+- **Three-level placement: workspace=space · tab=fleet run · pane=chunk.** The workspace is the human's
+  project space — do NOT create one per chunk. Tab 1 of a workspace belongs to the human's interactive
+  sessions — NEVER spawn fleet panes there or into whatever tab has focus. Create ONE `fleet:<epic>` tab per
+  run (`herdr tab create --workspace <ws> --label "fleet:<epic>" --no-focus`) and spawn all chunk panes into
+  it (`agent start ... --tab <tab_id>`); close or rename the tab (`fleet:<epic> ✓done`) when the run ends.
 - **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). `herdr agent wait --status idle` is LEVEL-triggered (returns instantly if already idle → no backpressure); herdr has no native turn-finished event. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
 - **Idle != done (background-shell flap).** A pane reports idle/`done` while merely *holding on a background shell* (a test suite,
   a forked review). Gate on a REAL signal: a **commit beyond `origin/main`** + a final report/STOP - not bare
