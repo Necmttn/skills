@@ -13,6 +13,17 @@ Two branches:
 
 Full command syntax lives in [herdr-cli.md](herdr-cli.md); read it before your first `send`.
 
+## Workspace placement (before any `agent start`)
+
+Every pane lives in a workspace, and workspaces belong to projects. Starting a pane without `--workspace` drops it into whatever workspace is focused - usually the WRONG one.
+
+1. Run `herdr agent list` and read each agent's `workspace_id` + `cwd`.
+2. Pick the workspace whose agents' `cwd` matches the project you are starting the pane for (the repo root, or a worktree under it).
+3. Pass it explicitly: `herdr agent start <name> --cwd <path> --workspace <ID> -- <argv>`.
+4. No matching workspace (new project, or an agent that needs isolation per the handoff flow)? Start one with a fresh label instead of squatting in an unrelated project's workspace.
+
+**Done when: the started pane's `workspace_id` in the start response matches the project you intended.** If it doesn't, `herdr pane close <pane>` and restart with the right `--workspace` - panes are cheap, misfiled sessions are not.
+
 ## Drive an agent
 
 `herdr agent list` enumerates every agent with its `pane_id` and `agent_status`. `herdr agent read <pane>` shows what it is doing; `herdr agent send <pane> "<text>"` types into its prompt - **literal text, no submit**. Submit separately with `herdr pane send-keys <pane> Enter`.
@@ -40,3 +51,4 @@ Move an agent's work to a fresh agent - a faster machine, a clean context, or a 
 - `agent send` is literal text; submission is a separate `pane send-keys <pane> Enter`. Numbered menus take `send-keys Down/Up/Enter/Escape`.
 - Agent CLIs reauth per machine: copy token files where allowed, otherwise log in on the target. The handoff issue stays readable regardless.
 - `read` returns JSON - extract `.result.read.text` to see the pane.
+- Omitting `--workspace` on `agent start` lands the pane in the focused workspace, which is often another project's. Always resolve the workspace first (see Workspace placement).
