@@ -179,6 +179,7 @@ orchestrator can resume from those alone.
   own dispatch; (c) such chunks carry a real-seam acceptance assertion (mock only non-deterministic leaves).
   UAT/dogfood is the backstop, not the primary catch.
 - **Never close a pane before archiving its result.** `close` is where the transcript dies (no herdr export; session-attach not guaranteed post-close). Capture `agent read --source recent` → the git-tracked run archive (`docs/superpowers/fleet-runs/<epic>.md`) FIRST, then close. The archive — not the live pane — is the restorable record.
+- **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Event-driven, not timed.** `herdr agent wait` background tasks are the notifier; `send_later`/
   `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that
