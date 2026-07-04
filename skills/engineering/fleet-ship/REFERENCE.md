@@ -45,8 +45,13 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > failing test FIRST (red), then green, then refactor. SEAM RULE (superpowers testing-anti-patterns.md): mock
 > ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named after; add
 > one test asserting the real observable effect at the real seam, not that a mocked dispatch was called
-> (delete-the-mock heuristic). GATES before done (superpowers:verification-before-completion): <repo gates,
-> e.g. bun run typecheck 0, bun run verify:effect 0, named suites green>. Then run git add -A && git commit
+> (delete-the-mock heuristic). WORKTREE GUARD: you and EVERY subagent you dispatch work ONLY in this worktree
+> (pwd must match it before any git command); NEVER cd to or commit in the primary checkout - two live
+> incidents (2026-07-04/05) had task subagents commit to main's checkout (recovered by cherry-pick + reset,
+> uncommitted work at risk). Run gates FROM the worktree too (a gate run from the main checkout silently
+> tests the wrong tree). GATES before done (superpowers:verification-before-completion): <repo gates,
+> e.g. bun run typecheck 0, bun run verify:effect 0, named suites green - capture tsc's REAL exit code, never
+> pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run git add -A && git commit
 > (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA +
 > test summary + concerns. Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the
 > orchestrator owns review + merge.
@@ -58,7 +63,9 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > RULE: mock ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named
 > after; add one test asserting the real observable effect at the real seam, not that a mocked dispatch was
 > called (if the test still passes with the mock removed, it tests nothing). Read CLAUDE.md for repo
-> conventions. GATES before done: <repo gates>. Then run git add -A && git commit (one conventional commit;
+> conventions. WORKTREE GUARD: work ONLY in this worktree; never cd to or commit in the primary checkout;
+> run gates from the worktree. GATES before done: <repo gates, real exit codes - never pipe tsc through
+> tail/grep before checking $?>. Then run git add -A && git commit (one conventional commit;
 > an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA + test summary + concerns.
 > Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge.
 
@@ -95,6 +102,8 @@ for i in $(seq 1 160); do
 done
 echo "TIMEOUT: $P"; exit 0
 ```
+NOTE (2026-07-05): if the orchestrator's harness reaps long-running background shells (waiters killed
+repeatedly), fall back to ScheduleWakeup/timed polling - less responsive, kill-proof.
 Run **in the background** per active pane: `bash /tmp/herdr_wait.sh <name> <worktree>` (run_in_background) →
 it exits only on a real commit → the harness re-invokes the orchestrator → sweep. (Pass the worktree to
 commit-gate; omit it only for doc/spec panes that may legitimately finish with no further commit.)
