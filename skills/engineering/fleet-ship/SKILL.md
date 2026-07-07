@@ -1,6 +1,6 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5, judgment→fable-5, review→fable-5/opus-4.8), each chunk plan→TDD→review→merge, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5, judgment→fable-5, review→fable-5/opus-4.8), each chunk plan→TDD→review→merge, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
 ---
 
 # Fleet Ship - parallel herdr orchestration
@@ -75,7 +75,9 @@ it into this table as the new default.
 1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
    (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
 2. `herdr status` up. A **GitHub Project** board (`gh project create`) - see [REFERENCE.md](REFERENCE.md).
-3. One **idle-waiter** background task per active pane (notification spine - REFERENCE).
+3. Two notification spines (REFERENCE): one **idle-waiter** background task per active pane (catches *done*)
+   AND one fleet-wide **liveness monitor** loop (catches *stuck/errored/dead*). Start the monitor when the
+   first pane spawns; keep it running the whole fleet.
 
 ## Per-chunk loop
 1. **Map FIRST.** `herdr agent list` + `git worktree list`. Never spawn into an occupied worktree or
@@ -112,7 +114,8 @@ it into this table as the new default.
    **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
    told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
    shape (build, bug fix, refactor, spike) ends with the verbatim block.**
-5. **Arm waiter.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on idle.
+5. **Arm waiter + monitor.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on
+   idle; AND ensure the fleet **liveness monitor** loop is running (it sweeps this pane for stuck/errored/dead).
 6. **Gate (you, fable/opus).** On idle: read the pane → `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
    mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
@@ -124,6 +127,29 @@ it into this table as the new default.
    fable/opus `dogfood` pane: run the app, exercise the chunk's new behavior + a core smoke, report → findings
    become **new kanban cards** linked to the chunk.
 9. **Fan out.** Spawn the next wave's *independent* chunks in parallel; sequence shared-file/reactor chunks.
+
+## Liveness monitor - the SECOND spine (waiters catch *done*; the monitor catches *stuck/errored/dead*)
+The idle-waiter only fires on `idle|done`. A pane that **errors** (network drop, `403 out of credits`, crash,
+connection-refused, rate-limit, model API 5xx), **freezes** mid-`working`, or flickers to `unknown` NEVER
+reaches idle → its waiter blocks to a **silent ~30-40 min TIMEOUT** and the chunk stalls invisibly while you
+think it's building. Waiters alone are blind to this - so run ONE wall-clock monitor loop for the WHOLE fleet,
+in parallel with the per-pane waiters. It RINGS; it does not auto-kill (classify via tail first - never kill a
+genuinely-`working` pane).
+1. **Sweep every ~2 min** (`run_in_background`, re-arming): `herdr agent list` → for each active fleet pane
+   snapshot `{status, output-tail hash, commits-beyond-main, dirty}` and diff vs the last snapshot in a state
+   file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
+2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script) → ring immediately
+   (`fleetctl attn <fleet-id> "<pane> errored: <line>"` + PushNotification on the user's Mac); don't wait out K sweeps.
+3. **STUCK** - status + output-hash + commit-count ALL unchanged for K sweeps (~6-10 min) while status ∉
+   `{idle,done}` → ring. Read the tail to classify: real long compile/suite (re-arm, leave it) vs frozen
+   (recover). A pane legitimately on a background shell shows *changing* output/logs - a frozen one is inert.
+4. **DEAD/gone** - pane vanished from `agent list` (crashed / user closed) but its chunk isn't merged → ring +
+   re-spawn on the fallback engine in the SAME already-installed worktree.
+5. **Recover a caught pane** via the Hard-rules credits/frozen path: close the dead pane → re-spawn
+   grok→codex→fable/opus (ascending intelligence) in the same worktree → re-arm BOTH its waiter and the monitor.
+6. **Distinct from the idle-waiter, not a replacement.** Waiter = "did it finish?" (git-state gate). Monitor =
+   "is it still alive + progressing?" (liveness gate). Both run per active pane; a chunk is advanced only by the
+   waiter's DONE/READY, rescued only by the monitor's STUCK/ERRORED/DEAD. See REFERENCE 'Liveness monitor'.
 
 ## Housekeeping — close done panes, KEEP their results (restorable)
 A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcript export; only the *session* persists, and even that is not guaranteed re-attachable after close). So **capture before you close**, into a git-tracked run archive — the durable, restorable record of what each agent actually did.
@@ -195,6 +221,8 @@ orchestrator can resume from those alone.
   chunk back to one it can (codex/claude). **Engines run out of credits/quota mid-run** (grok hit a
   `403: run out of credits`, pane frozen) - detect via a pane read, close the dead pane, and re-spawn the
   chunk on a fallback engine (grok→codex→fable/opus, ascending intelligence) in the SAME already-installed worktree. Keep >1 lane funded.
+  **The idle-waiter will NOT catch a frozen/errored pane** (it never goes idle) - the **liveness monitor** (above) is the
+  proactive spine that catches it. Always run BOTH per active pane: the git-state waiter for *done*, the monitor for *stuck/errored/dead*.
 - **Parallelize only within a wave where chunks don't share files.** **Verify "already done" claims**
   against current code before building (recent merges shift things).
 
