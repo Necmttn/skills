@@ -45,8 +45,13 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > failing test FIRST (red), then green, then refactor. SEAM RULE (superpowers testing-anti-patterns.md): mock
 > ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named after; add
 > one test asserting the real observable effect at the real seam, not that a mocked dispatch was called
-> (delete-the-mock heuristic). GATES before done (superpowers:verification-before-completion): <repo gates,
-> e.g. bun run typecheck 0, bun run verify:effect 0, named suites green>. Then run git add -A && git commit
+> (delete-the-mock heuristic). WORKTREE GUARD: you and EVERY subagent you dispatch work ONLY in this worktree
+> (pwd must match it before any git command); NEVER cd to or commit in the primary checkout - two live
+> incidents (2026-07-04/05) had task subagents commit to main's checkout (recovered by cherry-pick + reset,
+> uncommitted work at risk). Run gates FROM the worktree too (a gate run from the main checkout silently
+> tests the wrong tree). GATES before done (superpowers:verification-before-completion): <repo gates,
+> e.g. bun run typecheck 0, bun run verify:effect 0, named suites green - capture tsc's REAL exit code, never
+> pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run git add -A && git commit
 > (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA +
 > test summary + concerns. Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the
 > orchestrator owns review + merge.
@@ -58,7 +63,9 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > RULE: mock ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named
 > after; add one test asserting the real observable effect at the real seam, not that a mocked dispatch was
 > called (if the test still passes with the mock removed, it tests nothing). Read CLAUDE.md for repo
-> conventions. GATES before done: <repo gates>. Then run git add -A && git commit (one conventional commit;
+> conventions. WORKTREE GUARD: work ONLY in this worktree; never cd to or commit in the primary checkout;
+> run gates from the worktree. GATES before done: <repo gates, real exit codes - never pipe tsc through
+> tail/grep before checking $?>. Then run git add -A && git commit (one conventional commit;
 > an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA + test summary + concerns.
 > Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge.
 
@@ -95,6 +102,8 @@ for i in $(seq 1 160); do
 done
 echo "TIMEOUT: $P"; exit 0
 ```
+NOTE (2026-07-05): if the orchestrator's harness reaps long-running background shells (waiters killed
+repeatedly), fall back to ScheduleWakeup/timed polling - less responsive, kill-proof.
 Run **in the background** per active pane: `bash /tmp/herdr_wait.sh <name> <worktree>` (run_in_background) →
 it exits only on a real commit → the harness re-invokes the orchestrator → sweep. (Pass the worktree to
 commit-gate; omit it only for doc/spec panes that may legitimately finish with no further commit.)
@@ -134,6 +143,55 @@ for i in $(seq 1 120); do
   { [ "$s" = idle ] || [ "$s" = done ]; } && { echo "STABLE-IDLE: $P"; exit 0; }  # EXPLICIT idle/done only - treat "unknown" (parse flicker) as still-running, never as done
 done
 ```
+
+## Liveness monitor (the SECOND spine - catches stuck/errored/dead; waiters only catch done)
+The idle-waiter blocks until `idle|done`, so it is BLIND to a pane that errored, froze mid-`working`, or went
+`unknown` - that pane just spins to a silent ~30-40 min TIMEOUT. Run ONE monitor loop for the whole fleet
+(`run_in_background`, re-arming) alongside the per-pane waiters. It **rings** the orchestrator on a caught
+pane (via `fleetctl attn` + PushNotification); it never auto-kills - the orchestrator classifies the tail and
+recovers (close dead pane → re-spawn grok→codex→fable/opus in the same installed worktree).
+
+Error signatures (grep the tail case-insensitively - extend per engine):
+`out of credits|rate.?limit|429|403|5[0-9][0-9] (Bad Gateway|Internal|Service)|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found|No such file`
+
+`/tmp/herdr_monitor.sh` - sweeps ALL active fleet panes; state file diffs progress across sweeps:
+```sh
+STATE="${1:-/tmp/herdr_monitor_state}"; STALL_SWEEPS="${2:-4}"   # 4 sweeps × ~120s ≈ 8 min stuck-threshold
+# export NAMES="chunk-a chunk-b …" (your fleet's chunk ids) OR FLEET_TAB=<fleet tab id> before running - scoping is mandatory
+SIG='out of credits|rate.?limit|429| 403 | 5[0-9][0-9] |ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found'
+touch "$STATE"
+for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestrator on exit
+  # Scope to THIS fleet's chunk names ONLY - never ring on the orchestrator or a sibling fleet's panes.
+  # Set NAMES to your chunk ids ("chunk-a chunk-b …") OR filter agent list by your fleet tab id.
+  NAMES="${NAMES:-$(herdr agent list --tab "$FLEET_TAB" | python3 -c 'import sys,json;[print(a["name"]) for a in json.load(sys.stdin)["result"]["agents"] if a.get("name")]' 2>/dev/null)}"
+  for N in $NAMES; do
+    WT=".claude/worktrees/$N"
+    g=$(herdr agent get "$N" 2>/dev/null); [ -z "$g" ] && { echo "DEAD:$N gone from agent list"; continue; }   # vanished → ring+respawn
+    st=$(printf '%s' "$g" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null)
+    tail=$(herdr agent read "$N" --source recent --lines 40 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])' 2>/dev/null)
+    # ERRORED - ring NOW, don't wait out the stall window
+    if printf '%s' "$tail" | grep -Eiq "$SIG"; then
+      line=$(printf '%s' "$tail" | grep -Ei "$SIG" | tail -1)
+      echo "ERRORED:$N :: $line"; continue
+    fi
+    # progress fingerprint: status + tail-hash + commits-beyond-main
+    c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+    h=$(printf '%s' "$tail" | cksum | cut -d' ' -f1)
+    fp="$st:$h:$c"
+    prev=$(grep "^$N	" "$STATE" | cut -f2); cnt=$(grep "^$N	" "$STATE" | cut -f3); cnt=${cnt:-0}
+    if [ "$fp" = "$prev" ]; then cnt=$((cnt+1)); else cnt=0; fi
+    grep -v "^$N	" "$STATE" > "$STATE.tmp" 2>/dev/null; printf '%s\t%s\t%s\n' "$N" "$fp" "$cnt" >> "$STATE.tmp"; mv "$STATE.tmp" "$STATE"
+    # STUCK - no change for STALL_SWEEPS while NOT idle/done (idle/done is the waiter's job, not a stall)
+    case "$st" in idle|done) : ;; *) [ "$cnt" -ge "$STALL_SWEEPS" ] && echo "STUCK:$N status=$st unchanged ${cnt}×";; esac
+  done
+  sleep 120   # backpressure between sweeps (fine inside a background script - same as the waiter scripts above)
+done
+```
+Any `ERRORED:` / `STUCK:` / `DEAD:` line the orchestrator sees on the background task's output → read that pane's tail,
+classify (real long compile vs frozen), and recover per Hard rules. `STALL_SWEEPS` guards a legit long suite: a pane
+running tests has a *changing* tail (hash moves → cnt resets); only an inert pane accumulates cnt. Tune the threshold up
+for repos with multi-minute compiles. NOTE: if the harness reaps this background shell (same risk as the waiters), fall
+back to a `ScheduleWakeup`-timed sweep that runs the loop body ONCE per orchestrator wake - kill-proof, less responsive.
 
 ## Read a pane (JSON → text)
 ```sh
@@ -182,4 +240,10 @@ Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
 2. For the woken pane: read → finished? gate (`/review-all` + judgment) → merge → move card → dogfood.
    Blocked? read the blocker, unblock.
 3. Re-arm waiters for still-working panes; spawn next-wave independent chunks (engine-routed).
-4. Update the ledger (`.superpowers/sdd/…progress.md`) - survives compaction; trust it + `git log` over memory.
+4. **Woken by an `ERRORED:`/`STUCK:`/`DEAD:` from the liveness monitor?** Read that pane's tail → classify
+   (real long compile → re-arm, leave it; frozen/errored → close dead pane, re-spawn on fallback engine in the
+   same worktree, re-arm waiter + monitor). Confirm the monitor loop is still running; re-arm it if reaped.
+5. Update the ledger (`.superpowers/sdd/…progress.md`) - survives compaction; trust it + `git log` over memory.
+
+## Vitest pool on this box
+Do NOT pass `--pool=threads --poolOptions.threads.singleThread` to force worker-spawn under EAGAIN — it DISABLES vitest isolation, so jsdom/global state leaks across files and web suites throw false `found multiple elements` failures (verified on unmodified main). Use the DEFAULT run (isolated forks). If the box is EAGAIN-starved, reduce concurrency (fewer live panes) rather than singleThread.
