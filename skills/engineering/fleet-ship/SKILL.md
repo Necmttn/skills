@@ -245,6 +245,14 @@ orchestrator can resume from those alone.
   test file failed to load → 0 tests ran. So (a) name the repo's test framework + matcher set in the brief
   (e.g. "vitest, import from 'vitest', no bun:test/toStartWith"); (b) the orchestrator's gate must
   **actually run the new tests** - typecheck/verify alone pass over a non-loading or wrong-matcher test.
+- **Gate completeness: enumerate the FULL verification matrix, per chunk, from the plan (2026-07-10).** A gate
+  once ran only a boot test on a multi-scheme app and passed a chunk the plan gated on 4 schemes. The gate
+  step must LIST what the plan's phase names (every scheme, every suite, sim build, screenshots) and check
+  each off - "some test ran green" is not a gate.
+- **Liveness = branch commits, not board deltas (2026-07-10).** Any monitor/waiter/watchdog deciding
+  starved/stuck/unresponsive must check recent COMMITS on the fleet's branches before flagging - gh-closed
+  deltas batch behind gate queues (a watchdog false-alarmed 6x in one night on that signal alone; adding a
+  commits-alive check eliminated them).
 - **Green != correct — enforce SEAM discipline (define_view dogfood lesson).** A chunk shipped 31 green unit
   tests yet the feature hung in prod because they **mocked the dispatch (`CreateGoal`) — the behavior under
   test**; "green" meant "called the mock." The rules already existed (`testing-anti-patterns.md` + both review
