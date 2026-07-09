@@ -164,6 +164,7 @@ Skills I use daily for code work.
 - **[tdd](./skills/engineering/tdd/SKILL.md)** — Test-driven development with a red-green-refactor loop. Builds features or fixes bugs one vertical slice at a time.
 - **[domain-modeling](./skills/engineering/domain-modeling/SKILL.md)** — Actively build and sharpen a project's domain model — challenge terms against the glossary, stress-test with edge-case scenarios, and update `CONTEXT.md` and ADRs inline.
 - **[codebase-design](./skills/engineering/codebase-design/SKILL.md)** — Shared discipline and vocabulary for designing deep modules: a lot of behaviour behind a small interface, placed at a clean seam, testable through that interface.
+- **[ux-psychology](./skills/engineering/ux-psychology/SKILL.md)** - Six cognitive-bias rules (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring) for designing or critiquing forms, onboarding, paywalls, and pricing UI.
 
 ### Productivity
 
