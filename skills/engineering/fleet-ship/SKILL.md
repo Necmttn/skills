@@ -59,7 +59,7 @@ Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX,
 | model | cost | intelligence | taste | how to run |
 |---|---|---|---|---|
 | gpt-5.5 | 9 | 8 | 5 | Codex CLI ONLY - `codex exec` / `codex review` (`~/.codex/config.toml` defaults to gpt-5.5); herdr pane = codex argv below |
-| grok-4.5 | 8 | 7 | 4 | grok CLI - `grok --always-approve` (`-m` to pin model); second mechanical lane, peer of codex (2026-07-10) |
+| grok-4.5 | 8 | 7 | 4 | grok CLI - `grok --always-approve` (`-m` to pin model); second mechanical lane, peer of codex (2026-07-10). **BUILD lane only - grok STALLS on review workloads (live 2026-07-10): never route reviews to grok.** Cross-engine review of grok-built work → codex; review of codex-built work → fable/opus adversarial (not grok) |
 | sonnet-5 | 5 | 5 | 7 | `claude --model sonnet` / Agent `model:'sonnet'` |
 | opus-4.8 | 4 | 7 | 8 | `claude --model opus` / Agent `model:'opus'` |
 | fable-5 | 2 | 9 | 9 | `claude --model fable` / Agent `model:'fable'` |
@@ -194,6 +194,7 @@ Per chunk, right after merge (step 7), BEFORE closing:
 2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
 3. **THEN teardown:** `herdr pane close <pane_id>` (resolve id from the name) → `git worktree remove` → `git branch -D`. Last chunk of the run: `herdr tab rename <fleet-tab> "fleet:<epic> ✓done"` (or close it).
 4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority), or `herdr session attach <name>` for a live re-entry WHILE the session still persists.
+**Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
 Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
 
 ## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
