@@ -208,6 +208,10 @@ orchestrator can resume from those alone.
   returned terse. Read the *verdict*, not the diff.
 - **Each wake is small + stateless:** read tail → gate (`/review-all`) → merge → move card → spawn next →
   append one ledger line → done. Don't accumulate; the board + ledger are the memory.
+- **Prompt hygiene when parking (2026-07-10):** never leave unsubmitted draft text on your prompt line when
+  you yield/idle - supervisors and humans steer you through that line, and a watchdog that finds text there
+  must defer its message (live lesson: a starvation steering was correctly deferred for a full cycle because
+  the orchestrator parked with a half-typed draft). Submit or clear before yielding.
 - Spawn the *building* on panes; keep heavy reading/searching in **subagents** (they return conclusions,
   not file dumps), so your window holds coordination only.
 
