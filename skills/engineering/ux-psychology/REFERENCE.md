@@ -20,7 +20,9 @@ The psychology, evidence, and worked examples behind each rule in [SKILL.md](SKI
 
 **App example:** Onboarding that says "0% Complete" feels like a mountain. Onboarding that says "20% Complete" because "Account Created" is already checked feels like momentum.
 
-**Failure mode to flag:** progress indicators starting at 0%, step counters like "Step 1 of 9" with no credit for steps effectively done, checklists with nothing pre-checked.
+**Failure mode to flag:** progress indicators starting at 0%, step counters like "Step 1 of 9" with no credit for steps effectively done, checklists with nothing pre-checked; long flows that expose a daunting exact total before any value has landed.
+
+**Visual-cue calibration:** Marathon (social TV tracker) uses a quiet top progress bar in onboarding - enough feedback to sustain momentum, no fanfare. Typeform hides the total question count in long forms; when the finish line would demotivate rather than pull, show percentage or vague milestones ("Almost there") instead of "Step 2 of 12".
 
 ## 3. Reciprocity (Value First)
 
@@ -31,6 +33,8 @@ The psychology, evidence, and worked examples behind each rule in [SKILL.md](SKI
 **App example:** An SEO scanner that demands an account *before* scanning feels like a hostage situation. A scanner that runs the test, shows 3 critical errors, then asks for an email to "Save the full report" converts massively higher.
 
 **Failure mode to flag:** any gate (signup, email capture, paywall) placed before the product has demonstrated any value on this visit.
+
+**FTUE corollary (the eureka effect):** ~77% of app users churn within the first 3 days; the strongest counter is delivering the core value inside the first 60 seconds. Breathwork's onboarding *is* a guided breathing session - the user feels calmer before being asked for anything. Drop the user into a simplified version of the main tool and let one successful core action complete before any signup, goal-picking, or tutorial.
 
 ## 4. IKEA Effect / Endowment Effect (User Investment)
 
@@ -92,6 +96,32 @@ The psychology, evidence, and worked examples behind each rule in [SKILL.md](SKI
 
 **Ethical line:** the share-gate must state its price plainly ("Invite a friend to see your full recap"). Never harvest contacts or post on the user's behalf silently.
 
+## 10. Zeigarnik Chunking (Cognitive Load / Finishability)
+
+**Concept:** Incomplete tasks occupy the mind and pull toward completion (Zeigarnik, 1927) - but the pull only holds while the remaining work looks achievable. Exposing full complexity upfront (the 12-page IKEA manual) flips the effect into abandonment. Chunking keeps every visible horizon finishable.
+
+**App example:** Stomper explains its essentials in three minimalist steps - no wall of input fields on entry. Contrast with setup wizards that show "Step 1 of 14" plus a dense instruction page: users quit before beginning.
+
+**Failure mode to flag:** more than ~3 steps visible in one view; instruction text walls before the first interaction; wizards that enumerate the full step list upfront instead of revealing chunks progressively.
+
+## 11. Active Learning (Trial-and-Error Engagement)
+
+**Concept:** People internalize by doing, not by reading - action converts to understanding where passive consumption evaporates (the generation effect / testing effect). Instruction manuals don't work; guided execution does.
+
+**App example:** Sudoku apps skip the rules page entirely. They drop the user into a first puzzle and surface contextual hints as the user touches the board - each hint arrives exactly at its interaction point.
+
+**Failure mode to flag:** "Next, Next, Finish" modal tours the user clicks through without touching the product; upfront tooltip storms; any tutorial step that advances without the user performing the real interaction it describes.
+
+## 12. Familiarity / Instant Ownership (Personalization as Trust)
+
+**Concept:** People trust and engage with what feels personalized to them (mere-exposure and self-relevance effects). Handing over small controls early - like adjusting seat and mirrors in a new car - makes the product feel safe, comfortable, and theirs before any commitment is asked.
+
+**App example:** Speechify's first-run flow has new users pick voice tone, highlight style, and listening speed immediately, re-rendering the experience live with each choice. The reading environment is *theirs* within the first minute.
+
+**Failure mode to flag:** first-run experiences that showcase features but offer no control; preference screens whose choices produce no visible change until later; burying high-impact preferences (theme, density, voice) deep in settings.
+
+**Relation to rule 4 (IKEA):** IKEA raises exit cost via sunk investment; familiarity raises engagement via comfort and trust. The same preference-picking flow serves both - it is simultaneously the first investment and the ownership signal.
+
 ## Rule interactions
 
 - **Reciprocity + IKEA** compound in FTUE: deliver value first (reciprocity), have the user build something with it (IKEA), *then* gate. Duolingo runs both.
@@ -101,3 +131,6 @@ The psychology, evidence, and worked examples behind each rule in [SKILL.md](SKI
 - **Mirror → Label → Flex is a funnel:** effort makes the result feel personal (7), the result crystallizes into an identity (8), the identity becomes the shareable asset that acquires the next user (9). 16 Personalities and Spotify Wrapped run all three in sequence.
 - **Mirror tension with Smart Defaults / Reciprocity:** rules 1 and 3 minimize friction before value; rule 7 adds friction before the reveal. Resolve by surface: transactional flows (booking, checkout, search) get frictionless defaults; identity-producing flows (quizzes, analyses, personalized reports) get earned reveals.
 - **Label + Loss Aversion** in retention: a threatened *status* ("You're about to lose your 30-day streak - and your Top 1% badge") outperforms a threatened feature.
+- **Zeigarnik + Goal Gradient** are the two halves of wizard momentum: chunking (10) keeps the next horizon finishable; progress cues (2) show how close it is. A chunked flow with no progress bar wastes the pull; a progress bar over an unchunked wall wastes the chunk.
+- **Eureka sequences the onboarding rules:** core value first (3), then 1-3 ownership preferences (12), then the interactive walkthrough (11) chunked in threes (10), *then* the gate framed as saving progress (4). Signup is the last screen of onboarding, never the first.
+- **Active Learning constrains the Mirror:** rule 7's quiz friction must still be *doing*, not reading - multi-step quizzes work because each step is an interaction; a long passive explainer before the reveal loses both effects.
