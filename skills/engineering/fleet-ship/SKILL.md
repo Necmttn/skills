@@ -1,6 +1,6 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5, judgment→fable-5, review→fable-5/opus-4.8), each chunk plan→TDD→review→merge, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-4.8), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
 ---
 
 # Fleet Ship - parallel herdr orchestration
@@ -8,6 +8,33 @@ description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk back
 You are the **orchestrator** (run on fable-5 or opus-4.8). Panes do the building; you plan the waves, route engines,
 gate reviews, merge, track on a kanban, and dogfood. This skill *composes* our normal ship workflow -
 it just runs it across many parallel herdr panes instead of one session.
+
+## Multi-orchestrator coordination (MANDATORY - several fleets run this repo concurrently)
+The registry is **fleetboard** - a live board at `$FLEET_BOARD_URL` (default `http://localhost:7777`,
+server + CLI in `~/Projects/fleetboard`; VPS fleets set FLEET_BOARD_URL to the Mac's tailscale addr).
+Drive it with `bun ~/Projects/fleetboard/fleetctl.ts <register|heartbeat|claim|release|attn|deregister>`
+- claim returns exit 1 + holder when a resource is taken. Heartbeat each orchestrator wake. If the
+board is unreachable, fall back to `docs/superpowers/fleet-runs/ACTIVE.md` in the target repo.
+Live lessons that forced this: a fleet rebased main under another fleet's staged merge; three merges
+landed vitest-breaking test files; a port cleanup killed a sibling fleet's dev servers and a native
+build mid-compile.
+1. **Register on run start** (epic, status), **deregister on run end**, heartbeat between.
+2. **Claims are exclusive**: `main-merge` (only the holder merges/rebases main - others queue their
+   gated branches and note them in the registry), `sim:<udid>` (boot a SEPARATE simulator per fleet -
+   `xcrun simctl list devices available` then `boot`; never install/launch on a claimed sim),
+   `ports:<app>` (better: run dev stacks from YOUR worktree so `scripts/worktree-ports.sh` +
+   portless auto-offset - then no port claim is needed), `neon:<project>` (dev-DB migrations).
+3. **Before killing anything shared** (kill-port-listeners, `just * kill`, pkill, sim uninstall):
+   check the registry; if another fleet holds the claim, work around it or queue.
+4. **Shared merge gate**: `bun run test:vitest` from the repo root must be green before ANY merge to
+   main, whatever the fleet's own runner is (bun-runner-only gates shipped broken files three times).
+5. **The bell - single attention surface**: when blocked on a human decision or a must-see finding,
+   `fleetctl attn <fleet-id> "<one-line ask>"` (shows on the board + ntfy phone push) - plus
+   PushNotification when running on the user's Mac. Never ring for routine progress; the user watches
+   the board's attention list as the only inbox and expects silence otherwise. Poll `/state` for the
+   user's typed answer on your item after ringing.
+6. **Name your orchestrator pane/tab** (`herdr tab create --label "orchestrator:<epic>"`) so
+   `herdr agent list` yields a truthful census.
 
 ## Skills this composes (the chain - invoke these, don't reinvent)
 - **Drive panes:** `herdr-agent-orchestration` (read FIRST - `agent list/read/send/wait`, `pane send-keys`, `agent start`).
@@ -32,6 +59,7 @@ Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX,
 | model | cost | intelligence | taste | how to run |
 |---|---|---|---|---|
 | gpt-5.5 | 9 | 8 | 5 | Codex CLI ONLY - `codex exec` / `codex review` (`~/.codex/config.toml` defaults to gpt-5.5); herdr pane = codex argv below |
+| grok-4.5 | 8 | 7 | 4 | grok CLI - `grok --always-approve` (`-m` to pin model); second mechanical lane, peer of codex (2026-07-10) |
 | sonnet-5 | 5 | 5 | 7 | `claude --model sonnet` / Agent `model:'sonnet'` |
 | opus-4.8 | 4 | 7 | 8 | `claude --model opus` / Agent `model:'opus'` |
 | fable-5 | 2 | 9 | 9 | `claude --model fable` / Agent `model:'fable'` |
@@ -60,8 +88,8 @@ this skill; record which lane file version a run used in the ledger. Resolution 
 **user sentence override (ledger) > ~/.ax/fleet-routing.json > table below.**
 | work class | engine | notes |
 |---|---|---|
-| mechanical (clear spec, schema/validator/wiring, 1-3 files, migrations, data analysis) | **codex / gpt-5.5** `codex --dangerously-bypass-approvals-and-sandbox` | effectively free (cost 9, int 8); reads CLAUDE.md, cleanest fast lane (live evidence) |
-| burst overflow only (codex lane saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
+| mechanical (clear spec, schema/validator/wiring, 1-3 files, migrations, data analysis) | **codex / gpt-5.5** `codex --dangerously-bypass-approvals-and-sandbox` **AND grok-4.5** `grok --always-approve` - TWO peer lanes; route each unblocked mechanical chunk to whichever has free capacity, run both in parallel when several chunks are unblocked | codex: effectively free, reads CLAUDE.md. grok: same brief discipline (no Skill tool - spell it out); escalation ladder grok/codex → fable/opus in the SAME worktree. Keep >1 lane funded |
+| burst overflow only (both mechanical lanes saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
 | judgment / reactor-subtle / security / hard-unsupervised | **fable-5** `claude --model fable --dangerously-skip-permissions` (fallback opus-4.8) | int 9; always pin `--model` |
 | user-facing: UI / copy / API design | **fable-5 or opus-4.8** (taste ≥ 7) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor |
 | review + gate + merge | orchestrator (fable-5 or opus-4.8) + `codex review` as extra independent perspective | never delegated |
@@ -114,15 +142,22 @@ it into this table as the new default.
    **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
    told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
    shape (build, bug fix, refactor, spike) ends with the verbatim block.**
+<<<<<<< HEAD
 5. **Arm waiter + monitor.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on
    idle; AND ensure the fleet **liveness monitor** loop is running (it sweeps this pane for stuck/errored/dead).
-6. **Gate (you, fable/opus).** On idle: read the pane → `/review-all` → **seam check** (the
+6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane, then three passes before your judgment:
+   a. **Cross-engine review:** the chunk's diff is reviewed by the OTHER mechanical engine (codex-built chunk → grok review; grok-built → `codex review`). Reviewer gets plan section + diff; hunts correctness bugs + plan deviations. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
+   b. **Reuse/simplicity pass** on the same diff (either engine or fable): hand-rolled code that a shared package / the repo's package index already owns = must-fix; needless complexity = should-fix.
+   c. `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
    mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
    code*; a behavior-bearing chunk with only mocked-dispatch tests is NOT done → send back) →
    `superpowers:receiving-code-review` judgment → one fix subagent for Critical/Important →
-   `superpowers:finishing-a-development-branch` → **squash-merge to main.**
-7. **Track + housekeep.** Move the kanban card Todo→In Progress→Done; attach the PR; then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
+   `superpowers:finishing-a-development-branch`.
+   **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
+   reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
+   tiebreak, never a coin flip. Then **squash-merge to main.**
+7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
    fable/opus `dogfood` pane: run the app, exercise the chunk's new behavior + a core smoke, report → findings
    become **new kanban cards** linked to the chunk.
@@ -216,6 +251,7 @@ orchestrator can resume from those alone.
 - **Never close a pane before archiving its result.** `close` is where the transcript dies (no herdr export; session-attach not guaranteed post-close). Capture `agent read --source recent` → the git-tracked run archive (`docs/superpowers/fleet-runs/<epic>.md`) FIRST, then close. The archive — not the live pane — is the restorable record.
 - **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
+- **Never brief `git add -A` while worktree-root scratch exists (live lesson - BRIEF.md/REPORT.md shipped to main twice).** Pane briefs and reports live at the worktree root; `add -A` commits them, the squash-merge lands them on main, and every later worktree "inherits" a stale brief. Fix: gitignore the scratch names (`/BRIEF.md`, `/REPORT.md`) in the repo once, AND write briefs with explicit `git add <paths>` or `git add -A ':!BRIEF.md' ':!REPORT.md'`. Gate check: the review diff must not contain the brief/report files.
 - **Event-driven, not timed.** `herdr agent wait` background tasks are the notifier; `send_later`/
   `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that
   chunk back to one it can (codex/claude). **Engines run out of credits/quota mid-run** (grok hit a

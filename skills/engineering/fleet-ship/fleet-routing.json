@@ -12,6 +12,15 @@
       "origin": "user 2026-07-02: route all mechanical to codex"
     },
     {
+      "id": "mechanical-grok",
+      "match": "mechanical implementation (same class as `mechanical`); use to PARALLELIZE across engines when several mechanical tickets are unblocked and the codex lane is busy",
+      "engine": "grok",
+      "argv": "grok --always-approve",
+      "enabled": true,
+      "reason": "grok 4.5 via grok CLI (v0.2.93). Second mechanical lane alongside codex - route to whichever has free capacity. Gate identically to codex; non-Claude pane so no Skill tool -> spell the discipline out in the brief.",
+      "origin": "user 2026-07-10: grok 4.5 available, add as second mechanical engine, parallelize with codex"
+    },
+    {
       "id": "judgment",
       "match": "reactor-subtle, security-critical, multi-file design, seam-critical",
       "engine": "opus",
