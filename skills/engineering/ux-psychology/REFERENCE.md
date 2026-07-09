@@ -62,9 +62,42 @@ The psychology, evidence, and worked examples behind each rule in [SKILL.md](SKI
 
 **Failure mode to flag:** any price, add-on, or upsell rendered on a screen with no larger reference value preceding it; pricing tables without a premium anchor tier.
 
+## 7. Effort Justification / The Mirror (Barnum Effect + Sunk Cost)
+
+**Concept:** Users rate an output as more personal and more valuable when they worked to get it. Two biases stack: the Barnum effect (generic statements engineered to feel individually tailored - Forer, 1949) and effort justification (Aronson & Mills, 1959; the sunk-cost side of cognitive dissonance). Friction before the reveal doesn't kill conversion - it amplifies the perceived value of what's revealed.
+
+**App example:** Starcross (soulmate-prediction astrology app). Tedious onboarding - exact birth time, city, date - then a long "analyzing" loader, then a paywall in front of the result. The output is assembled from pre-written traits, but the invested effort makes it feel deeply custom.
+
+**Failure mode to flag (generation):** instant, effortless reveals of high-stakes personalized output - a one-click "your result" undersells real analysis. **Failure mode to flag (critique):** the inverse fraud - long quizzes whose answers demonstrably don't change the output. That's the dark-pattern variant; see the ethical line below.
+
+**Ethical line:** stage *real* computation. Every collected input must influence the output. A loader over genuine work is theater in the good sense; a loader over a canned result is fraud.
+
+## 8. Identity Labeling / The Label (Identity-Driven Retention)
+
+**Concept:** A specific, flattering label the user adopts as identity is the strongest retention mechanic available. Once "I am an X" enters their self-concept, abandoning the product means giving up a piece of themselves (self-perception theory - Bem, 1972; identity-based motivation).
+
+**App example:** 16 Personalities (MBTI). Users get a four-letter archetype ("INFJ - The Advocate"), then put it in dating bios and use it to explain themselves at work. The label outlives any session.
+
+**Failure mode to flag:** end-of-flow screens that dump raw stats ("You wrote 10,000 lines of code") instead of synthesizing an archetype ("Top 1% Systems Architect"); profiles with no claimable badge or status.
+
+**Ethical line:** the label must be earned from the user's actual data. A label everyone receives regardless of input is a horoscope, and collapses the moment users compare notes.
+
+## 9. Ego-Driven Sharing / The Flex (Virality)
+
+**Concept:** The strongest referral program is one the user doesn't experience as marketing. Package the user's data into an aesthetic asset that proves their taste or status; the selfish act of bragging becomes the acquisition engine (costly signaling / social currency - Berger, *Contagious*, 2013).
+
+**App example:** Airbuds - beautifully designed weekly listening recaps; unlocking the *full* recap requires inviting a friend, so the share asset and the invite are one loop. Also: Strava run maps, Wordle's green/yellow squares (which encode status while spoiling nothing), Spotify Wrapped.
+
+**Failure mode to flag:** share buttons bolted onto screens with nothing brag-worthy; recap cards headlined by the product's brand instead of the user's achievement; referral programs that pay in discounts (transactional) where an ego-asset (status) would work harder.
+
+**Ethical line:** the share-gate must state its price plainly ("Invite a friend to see your full recap"). Never harvest contacts or post on the user's behalf silently.
+
 ## Rule interactions
 
 - **Reciprocity + IKEA** compound in FTUE: deliver value first (reciprocity), have the user build something with it (IKEA), *then* gate. Duolingo runs both.
 - **Goal Gradient + IKEA** compound in wizards: pre-punched progress starts momentum; each completed step deepens investment.
 - **Loss Aversion supersedes Reciprocity** for existing users: retention screens should protect what the user has, not offer new gifts.
 - **Contrast + Smart Defaults** in pricing: the anchor tier is the contrast; the pre-selected middle tier is the smart default. Use together - an anchored table with nothing pre-selected still forces a decision.
+- **Mirror → Label → Flex is a funnel:** effort makes the result feel personal (7), the result crystallizes into an identity (8), the identity becomes the shareable asset that acquires the next user (9). 16 Personalities and Spotify Wrapped run all three in sequence.
+- **Mirror tension with Smart Defaults / Reciprocity:** rules 1 and 3 minimize friction before value; rule 7 adds friction before the reveal. Resolve by surface: transactional flows (booking, checkout, search) get frictionless defaults; identity-producing flows (quizzes, analyses, personalized reports) get earned reveals.
+- **Label + Loss Aversion** in retention: a threatened *status* ("You're about to lose your 30-day streak - and your Top 1% badge") outperforms a threatened feature.

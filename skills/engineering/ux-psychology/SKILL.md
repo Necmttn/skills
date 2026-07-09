@@ -1,11 +1,11 @@
 ---
 name: ux-psychology
-description: Apply six cognitive-bias patterns (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring) when designing or critiquing UI. Use when generating or reviewing forms, onboarding flows, multi-step wizards, signup/auth walls, paywalls, pricing tables, upsells, progress indicators, or retention screens - or when the user asks for a UX critique, conversion optimization, or to "make this screen convert better".
+description: Apply nine cognitive-bias patterns (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring, effort justification, identity labeling, ego-driven sharing) when designing or critiquing UI. Use when generating or reviewing forms, onboarding flows, multi-step wizards, signup/auth walls, paywalls, pricing tables, upsells, progress indicators, retention screens, result reveals, profile/archetype screens, share cards, or referral loops - or when the user asks for a UX critique, conversion optimization, retention mechanics, viral loops, or to "make this screen convert better".
 ---
 
 # UX Psychology
 
-Six cognitive-bias rules for generating or critiquing UI. Each rule fires on a trigger surface - when the UI you're building or reviewing matches a trigger, apply that rule. For the psychology, evidence, and worked app examples behind each rule, see [REFERENCE.md](REFERENCE.md).
+Nine cognitive-bias rules for generating or critiquing UI. Rules 1-6 drive conversion on a single screen; rules 7-9 drive retention and acquisition across the product. Each rule fires on a trigger surface - when the UI you're building or reviewing matches a trigger, apply that rule. For the psychology, evidence, and worked app examples behind each rule, see [REFERENCE.md](REFERENCE.md).
 
 ## Rules
 
@@ -43,11 +43,29 @@ Six cognitive-bias rules for generating or critiquing UI. Each rule fires on a t
 - **Trigger:** pricing tables, upsells, add-on modules.
 - **Action:** never present a cost in isolation. Inject a high-value anchor immediately before the target price (the $50 add-on sits under the $1,900 cart item).
 
+### 7. Effort Justification / The Mirror - earned results feel personal
+
+- **Trigger:** onboarding quizzes, data-capture flows, AI/analysis result reveals.
+- **Action:** make the user work for the reveal. Break single forms into multi-step quiz flows; stage the result behind a visible analysis step ("Analyzing your inputs..."). The invested effort amplifies the perceived value of the output.
+- **Constraint:** the output must genuinely derive from the collected inputs. Staged waits on real computation are fine; fake analysis over a canned result is deception (see Ethical boundary).
+
+### 8. Identity Labeling / The Label - retention through self-concept
+
+- **Trigger:** end-of-flow summaries, user profiles, gamification systems, stats dashboards.
+- **Action:** never show only raw stats. Synthesize behavior into a definitive, flattering archetype or status the user can adopt ("Top 1% Listener", "Systems Architect"), with a badge or visual they can claim. Once the label is part of their identity, leaving costs a piece of themselves.
+- **Copy:** name the archetype; don't describe the data ("You are The Advocate", not "You scored high on empathy").
+
+### 9. Ego-Driven Sharing / The Flex - bragging as acquisition
+
+- **Trigger:** sharing mechanics, referral programs, recap/dashboard summaries.
+- **Action:** find the one piece of data the user is proudest of and package it as a minimal, aesthetic, watermarked card. Make Share the primary CTA, and make the share action and the invite action the same loop (recap unlocks by inviting a friend).
+- **Copy:** the card speaks for the user's status, not the product ("12,000 km run this year", not "Made with AppName" as the headline).
+
 ## Critique workflow
 
 When reviewing an existing screen:
 
-1. Identify which trigger surfaces the screen contains (form? gate? price? progress? warning?).
+1. Identify which trigger surfaces the screen contains (form? gate? price? progress? warning? reveal? profile? share?).
 2. For each matched rule, check the Action and Copy lines above. Each violation is a finding.
 3. Report findings as: **rule → violation → concrete rewrite** (the exact replacement default, copy, or layout change).
 
@@ -58,3 +76,5 @@ When building a new screen, run the trigger list before writing markup. Apply ev
 ## Ethical boundary
 
 These patterns reduce friction toward what the user already wants; they must not manufacture false urgency or trap users. Loss-aversion framing must state *true* consequences (files really will be deleted). Never fabricate scarcity, hide cancel paths, or use confirm-shaming for harmless dismissals - "I accept the risk" is for real risk only.
+
+The retention/virality rules have the same honesty line. Effort justification must stage *real* computation - collecting inputs the output never uses is Barnum-effect fraud. Labels must be grounded in the user's actual data, not universally flattering horoscopes. Share-gates must say what unlocking costs ("Invite a friend to see your full recap"), never harvest contacts silently.

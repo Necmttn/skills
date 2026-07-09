@@ -23,4 +23,4 @@ Model- or user-reachable (rich trigger phrasing so the model can reach for them)
 - **[tdd](./tdd/SKILL.md)** — Test-driven development with a red-green-refactor loop. Builds features or fixes bugs one vertical slice at a time.
 - **[domain-modeling](./domain-modeling/SKILL.md)** — Actively build and sharpen a project's domain model — challenge terms, stress-test with scenarios, update `CONTEXT.md` and ADRs inline.
 - **[codebase-design](./codebase-design/SKILL.md)** — Shared discipline and vocabulary for designing deep modules: small interfaces, clean seams, testable through the interface.
-- **[ux-psychology](./ux-psychology/SKILL.md)** - Six cognitive-bias rules (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring) for designing or critiquing forms, onboarding, paywalls, and pricing UI.
+- **[ux-psychology](./ux-psychology/SKILL.md)** - Nine cognitive-bias rules (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring, effort justification, identity labeling, ego-driven sharing) for designing or critiquing conversion, retention, and viral-loop UI.
