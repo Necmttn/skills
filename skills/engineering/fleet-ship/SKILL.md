@@ -253,6 +253,14 @@ orchestrator can resume from those alone.
   starved/stuck/unresponsive must check recent COMMITS on the fleet's branches before flagging - gh-closed
   deltas batch behind gate queues (a watchdog false-alarmed 6x in one night on that signal alone; adding a
   commits-alive check eliminated them).
+- **A safety protocol must have AUTHORITY to cause its own preconditions (2026-07-10 rotation livelock).**
+  The orchestrator context-rotation protocol required (fresh handoff) AND (idle + empty prompt) - the
+  watchdog could only wait for both, they never aligned, and a human had to rotate manually at 954k ctx.
+  When designing any monitor-triggered maneuver: every precondition needs either an action that CAUSES it
+  (submit the blocking draft after logging it; order "checkpoint + park empty" as ONE atomic instruction)
+  or a hard-ceiling override; freshness checks compare against content (newer than last state commit),
+  never wall-clock windows; and 2 consecutive same-cause blocked cycles = an incident, not patience.
+  Orchestrators: keep the handoff refreshed as part of PARKING, not as a favor when asked.
 - **Green != correct — enforce SEAM discipline (define_view dogfood lesson).** A chunk shipped 31 green unit
   tests yet the feature hung in prod because they **mocked the dispatch (`CreateGoal`) — the behavior under
   test**; "green" meant "called the mock." The rules already existed (`testing-anti-patterns.md` + both review
