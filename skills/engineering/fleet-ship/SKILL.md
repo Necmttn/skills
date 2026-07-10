@@ -273,6 +273,19 @@ orchestrator can resume from those alone.
 - **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Never brief `git add -A` while worktree-root scratch exists (live lesson - BRIEF.md/REPORT.md shipped to main twice).** Pane briefs and reports live at the worktree root; `add -A` commits them, the squash-merge lands them on main, and every later worktree "inherits" a stale brief. Fix: gitignore the scratch names (`/BRIEF.md`, `/REPORT.md`) in the repo once, AND write briefs with explicit `git add <paths>` or `git add -A ':!BRIEF.md' ':!REPORT.md'`. Gate check: the review diff must not contain the brief/report files.
+- **Long briefs travel as files, not keystrokes (2026-07-10 API-drop lessons).** Spawning/briefing with a
+  large prompt over `agent send` during API instability drops mid-stream and leaves half-briefed panes +
+  stale drafts. Write the brief to the worktree as BRIEF.md and SEND A SHORT POINTER ("read BRIEF.md and
+  execute"); same for any steering over ~10 lines.
+- **Waiter timeout != stuck: verify liveness before acting (2026-07-10).** Commit-gated waiters time out
+  under legitimately long chunks (a pane on task 8 with 8 commits got flagged twice). On waiter exit:
+  check pane status + recent commits FIRST; alive -> re-arm with a longer timeout (or require heartbeat
+  commits in the brief); only dead/commit-silent panes get the stuck treatment. An "API Error: Connection
+  closed mid-response" tail + clean worktree = RECOVERABLE mid-turn drop: nudge the same pane, don't respawn.
+- **A wrapper agent completing is NOT a review verdict (2026-07-10).** Review-wrapper subagents drop under
+  API instability and can return without a verdict; the gate must check a verdict EXISTS, and on wrapper
+  failure fall back to direct CLI (`codex review` / `grok` via Bash), logging the wrapper failure. Never
+  count a wrapper's clean exit as a PASS.
 - **Event-driven, not timed.** `herdr agent wait` background tasks are the notifier; `send_later`/
   `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that
   chunk back to one it can (codex/claude). **Engines run out of credits/quota mid-run** (grok hit a
