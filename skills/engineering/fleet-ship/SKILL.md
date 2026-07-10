@@ -218,6 +218,14 @@ orchestrator can resume from those alone.
 ## Hard rules (live-dogfood lessons)
 - **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt
   before `send`; submit is a separate `send-keys Enter`.
+- **`agent send` REPLACES the prompt line - it does NOT append; and `send-keys Enter` alone CANNOT submit
+  a human-typed parked draft (2026-07-10, bit twice in one session).** A bare Enter on a user-typed draft
+  silently no-ops (pane stays idle, draft stays parked - verify status flipped to `working` after EVERY
+  submit, never assume). And steering a pane that holds a parked draft CLOBBERS the draft (a user's
+  'ping me when A14 lands' was overwritten by a steer). Correct protocol to submit a parked draft:
+  (1) `agent read` to capture the draft text + log it, (2) `agent send <the same text>` (the replace
+  makes it submittable), (3) `send-keys Enter`, (4) confirm status = `working`. Only then send your own
+  steering as the next message.
 - **Name everything; report by name.** `agent start <chunk-id>` — the name IS the chunk id, unique per fleet
   (never generic like `codex`: detected labels are also targets → ambiguous). ALL `herdr agent *` commands
   (get/read/send/wait/rename/focus/attach) accept the NAME as target; address by name everywhere. Pane id is
