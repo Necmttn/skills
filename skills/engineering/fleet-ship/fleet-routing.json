@@ -31,12 +31,12 @@
     },
     {
       "id": "frontier",
-      "match": "design/UX composition, novel features, frontier-quality wanted",
+      "match": "scoping, planning, spec/design-doc authoring, and REVIEW of plans/reports/diffs ONLY - never a build lane; route builds to mechanical (codex/grok) or judgment (opus, sonnet taste floor)",
       "engine": "fable",
       "argv": "claude --model fable --dangerously-skip-permissions",
       "enabled": true,
-      "reason": "Fable 5 - newest flagship; flip 'judgment' work here by editing match/engine",
-      "origin": "user 2026-07-02: fable now available"
+      "reason": "Fable 5 - newest flagship, most expensive; reserve for high-leverage scoping/planning/review",
+      "origin": "user 2026-07-12: fable only for scoping/planning tasks and reviewing plans and reports (persisted from post-epic run steer)"
     },
     {
       "id": "mechanical-spark",
