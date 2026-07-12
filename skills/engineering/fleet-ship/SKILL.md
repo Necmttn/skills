@@ -196,6 +196,14 @@ Per chunk, right after merge (step 7), BEFORE closing:
 4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority), or `herdr session attach <name>` for a live re-entry WHILE the session still persists.
 **Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
 Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
+**Close at COMMIT+REPORT, not at merge (2026-07-13, user rule — 11 idle panes piled up waiting out a long review queue).**
+A build pane's job ends when its branch is committed and its report is captured; the WORKTREE + BRANCH are the durable
+artifacts the gate/merge needs — the pane is not. As soon as the waiter fires READY and you've archived
+`agent read --source recent`, CLOSE the pane; run cross-review/gates against the worktree, and only tear down the
+worktree+branch after merge. Exception: a pane you expect to send back imminently (review already running, verdict
+minutes away) may stay for ONE gate cycle — a send-back to a closed pane costs a fresh spawn in the same worktree with
+the findings as the brief, which is acceptable and often cleaner (fresh context) than keeping N idle panes alive.
+Idle panes with no live job are a defect: every fleet-tab pane must be `working` or awaiting an imminent send-back.
 
 ## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
 Your state lives in the **ledger + kanban + git**, NOT your context. So you survive compaction and a fresh
