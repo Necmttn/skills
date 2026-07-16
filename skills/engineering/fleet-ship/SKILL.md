@@ -250,8 +250,10 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    and confirm the command/skill banner appears before sending the follow-up context; plugin-namespaced
    skills (`superpowers:*`) additionally require that plugin installed under the pane's user — file-sync
    alone never provides them.
-5. **Arm waiter + monitor.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on
-   idle; AND ensure the fleet **liveness monitor** loop is running (it sweeps this pane for stuck/errored/dead).
+5. **Arm waiter + monitor.** Run the canonical background waiter from REFERENCE: `herdr agent wait` supplies
+   bounded backpressure only, then `herdr agent get` payloads gate on `agent_status` in `idle|done`; never
+   treat the wait command's exit code as completion. AND ensure the fleet **liveness monitor** loop is
+   running (it sweeps this pane for stuck/errored/dead).
 6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane, then three passes before your judgment:
    a. **Cross-engine review:** the chunk's diff is reviewed by the OTHER mechanical engine (codex-built chunk → grok review; grok-built → `codex review`). Reviewer gets plan section + diff; hunts correctness bugs + plan deviations. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
    b. **Reuse/simplicity pass** on the same diff (either engine or fable): hand-rolled code that a shared package / the repo's package index already owns = must-fix; needless complexity = should-fix.
@@ -380,7 +382,7 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
   CHANGES on move (wV:pC → w0:p1) but the agent NAME resolves seamlessly across it — one more reason waiters
   and every reference must target the NAME; any pane-id-addressed waiter dies silently on a move (re-arm by
   name).
-- **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). `herdr agent wait --status idle` is LEVEL-triggered (returns instantly if already idle → no backpressure); herdr has no native turn-finished event. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
+- **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on polled `agent get` payloads in `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). `herdr agent wait --status idle` is LEVEL-triggered; against `done` it resolves quickly but exits 1, so its exit code is never the gate. Never request `done` through `agent wait`; use pane-addressed `herdr wait agent-status` only when `done` must be a first-class target. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
 - **Idle != done (background-shell flap).** A pane reports idle/`done` while merely *holding on a background shell* (a test suite,
   a forked review). Gate on a REAL signal: a **commit beyond `origin/main`** + a final report/STOP - not bare
   idle. Make the waiter **commit-gated** (re-arm until a commit appears). Live lesson: a pane mid `+2292/-11510`
@@ -431,7 +433,8 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
   API instability and can return without a verdict; the gate must check a verdict EXISTS, and on wrapper
   failure fall back to direct CLI (`codex review` / `grok` via Bash), logging the wrapper failure. Never
   count a wrapper's clean exit as a PASS.
-- **Event-driven, not timed.** `herdr agent wait` background tasks are the notifier; `send_later`/
+- **Event-driven, not timed.** Canonical background waiters use `herdr agent wait` only for bounded
+  backpressure; polled `agent get` status plus git state is the completion gate. `send_later`/
   `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that
   chunk back to one it can (codex/claude). **Engines run out of credits/quota mid-run** (grok hit a
   `403: run out of credits`, pane frozen) - detect via a pane read, close the dead pane, and re-spawn the
