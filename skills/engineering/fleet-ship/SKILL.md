@@ -167,6 +167,26 @@ orchestrator reads on every wake, independent of any live waiter:
   truth that survives both dying. A chunk may only be considered lost if all three are silent AND the
   worktree shows no commits.
 
+## Run map — wayfinder-inspired: ONE issue the human reads to understand the whole run
+The kanban shows status and the archive holds detail, but neither answers "where is this effort and what
+has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that skill for the full pattern):
+- **One GitHub issue per epic, labeled `fleet:map`** — an INDEX, never a store: **Destination** (1-2 lines,
+  what shipped means), **Decisions so far** (one line per merged chunk: chunk name wrapping its PR link +
+  a one-line gist; detail stays in the PR/archive — the map never restates it), **Not yet specified** (the
+  fog), **Out of scope** (ruled out + why, so it never resurfaces). Update it in the same wake that merges
+  + archives a chunk.
+- **Refer by NAME everywhere** (extends the pane rule to chunks/cards/issues): names wrap links; a wall of
+  bare `#42 #43` is illegible to the human.
+- **Frontier discipline:** express chunk dependencies as native GitHub blocked-by relations where available
+  (falls back to a checklist on the map) so the tracker renders ready-vs-blocked visually. The frontier =
+  open + unblocked + unclaimed chunks — the ONLY things a wave may spawn. **Claim-first:** assign the chunk
+  issue/card to this fleet BEFORE spawning its pane (complements fleetboard claims; dedups concurrent
+  orchestrators the same way wayfinder claims tickets by assignee).
+- **Fog of war:** do NOT pre-slice unclear work into chunks at backlog time — park it in Not-yet-specified
+  and graduate it into real chunks when merges sharpen the question (test: can you state the spec precisely
+  NOW? — not "can you answer it"). Design/ambiguous chunks stay HITL: parallel-explore produces options
+  marked AWAITING-DECISION → `✋` + bell; the fleet NEVER answers the human's side of a decision.
+
 ## Setup (once)
 1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
    (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
@@ -225,7 +245,7 @@ orchestrator reads on every wake, independent of any live waiter:
    **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
    reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
    tiebreak, never a coin flip. Then **squash-merge to main.**
-7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
+7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. Append the chunk\u2019s decision line to the run map (see Run map). **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
    **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-4.8 for reactor-subtle merges;
    never fable - scoping/planning/review only per the 2026-07-12 steer): run the app, exercise the chunk's new
