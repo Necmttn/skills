@@ -271,6 +271,27 @@ reactor-subtle merges; never fable (scoping/planning/review only).
 Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
 > GATE dogfood panes on the REPORT FILE, not pane status: brief them to write findings to a known path (e.g. scratchpad/dogfood-output/report.md); the waiter polls for that file's existence. herdr status for app-driving panes flickers to `unknown` and breaks status-based waiters (a real 'stuck' — the loop went blind while the dogfood was actually done).
 
+## Rotation handoff schema (pointers + fresh queries — only Known-blockers is prose)
+```markdown
+# Handoff: <epic> - rotation N
+## Goal (pointer, not restated)
+Run-map issue: <url>
+## State snapshot (as of <ts>, derived fresh - not memory)
+- Ledger: <path> - last line: "<verbatim>"
+- Kanban: <url> - Todo:N InProgress:N Done:N
+- Fleetboard claims held: <list|none>
+- Fleet-tab panes: <name (pane_id): status> each
+- Signals file: <path> - unreconciled DONE|BLOCKED|ERROR lines
+## In-flight per chunk (unmerged only)
+- <chunk>: worktree, branch, pane <name (id)>, stage, waiter/monitor armed y/n
+## Active steering overrides (must survive rotation)
+## Open bell items / unresolved human asks
+## Known blockers (ONLY freeform section)
+## Resume checklist (successor's first 5 actions)
+1. cat <ledger>  2. kanban query  3. herdr agent list  4. fleetctl heartbeat  5. reconcile in-flight vs 1-3
+```
+Full rationale + sources: `docs/research/orchestrator-context-reduction.md` (apps repo).
+
 ## Sweep checklist (each wake)
 1. `herdr agent list` + `git worktree list` - map state.
 2. For the woken pane: read → finished? gate (`/review-all` + judgment) → merge → move card → dogfood.

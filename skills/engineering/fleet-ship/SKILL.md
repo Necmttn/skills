@@ -313,6 +313,25 @@ orchestrator can resume from those alone.
   not file dumps), so your window holds coordination only - and those dispatches are mechanical, so they
   carry `model:'sonnet'` (`'haiku'` for pure locate), never the inherited orchestrator model.
 
+## Orchestrator rotation — proactive, not incident-driven (2026-07-16)
+Orchestrator main-loops were ~78% of a measured 2-week fleet spend (ax cost split) — cost per wake grows
+with window size, so cap the window by ROTATING on schedule instead of riding to auto-compact (research +
+sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
+- **Triggers (single-condition each, never ANDed — the 954k livelock came from conjoined preconditions):**
+  (a) ~70-75% of context window (leaves room to write the handoff BEFORE auto-compact can fire mid-handoff);
+  (b) 4-6h of active wakes as a hard wall-clock ceiling; (c) any rotation-blocking cause observed 2 cycles
+  in a row = incident, rotate now; (d) user says "rotate" — immediate.
+- **Rotation is ONE atomic instruction:** write the handoff doc + commit + park with an empty prompt — never
+  a sequence a watchdog must observe from outside.
+- **Handoff = pointers + fresh query results, never narrative summary** (schema in REFERENCE.md). The
+  successor gets the same SOURCES the predecessor had (ledger path, kanban, agent list, signals file,
+  steering overrides), not the predecessor's interpretation; the only prose section is Known-blockers.
+- **Successor protocol:** treat every snapshot field as stale — re-run the command behind it; reconcile
+  (orphan sweep) before spawning; re-arm waiters + monitor (process-local, never inherited); register on
+  fleetboard as a new instance; only then read Known-blockers.
+- Keep the handoff REFRESHED as part of parking (existing hard rule) so an unplanned death degrades into a
+  planned rotation.
+
 ## Hard rules (live-dogfood lessons)
 - **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt
   before `send`; submit is a separate `send-keys Enter`.

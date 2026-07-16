@@ -6,6 +6,8 @@ Research context: cataloguing best-in-class mobile app onboarding + paywall + mo
 
 Status: all 30 most recent videos processed (2026-07-16). Videos 1-21 were analyzed with **Gemini 3.1 Pro**; videos 22-30 with **Gemini 3.1 Flash-Lite** (the Pro daily quota was exhausted mid-run) - Flash-Lite entries are tagged `done (flash-lite)` in the queue and carry a per-block MODEL NOTE; treat their exact numbers as needing re-verification. The channel has ~285 older videos not enumerated here (Status: deferred). Resume by extracting the queue with YouTube's `ytInitialData` `lockupViewModel` nodes (window-scroll lazy-load does not fire in the automation tab; read the embedded data instead).
 
+VISUAL analysis: the prompt was later upgraded to make Gemini analyze the actual video FRAMES (on-screen app UI), not just the transcript. A dedicated "### Visual details (on-screen UI)" section (timestamped, describing real onboarding/paywall screens) has been added to the entries that actually demo app UI: videos 8, 9, 12, 13, 14, 20, 21. It reliably captured real paywall layouts, CTA text ("Continue", "Start free trial"), badges ("cancel anytime"), pricing tiers, mascots, and screen order - and honestly wrote "no app UI shown" where the video only showed talking heads/marketing tools (e.g. #21 only shows the SpyTok tool). The visual pass used Flash-Lite (Pro still rate-limited); re-run on Pro after the quota resets for higher-fidelity frame analysis of the remaining videos. The visual prompt template: "Do a VISUAL frame-by-frame analysis of <URL> (<TITLE>). Watch the actual screens shown - onboarding sequences, paywall layouts, pricing tables, buttons - and output ONLY a '### Visual details (on-screen UI)' timestamped bullet list of what is literally visible (screen order, layout, pricing-tier presentation, exact button/CTA text, badges, colors, imagery). Base it on the frames, not just audio. If no app UI is shown, say so. If you cannot access the video, say CANNOT_ACCESS."
+
 Extraction gotchas for future runs: (1) Gemini occasionally only embeds the video with no analysis - re-prompt in the same chat ("you only embedded the video, now analyze it") to recover (happened on videos 13, 14). (2) After submitting, reload the chat URL before scraping - the streamed text renders late in the DOM. (3) The reusable resource across almost every video is Superwall's free tool **paywallexperiments.com** (AI trained on 422 profitable paywall experiments) and the **Consumer Club** Discord (median $1M ARR founders); **SpyTok** and **RorMax** recur as the standard TikTok-research and AI-iOS-coding tools.
 
 ## Work queue
@@ -306,6 +308,19 @@ TL;DR (Gemini): Nicole (founder of Glam Up and Sprout) scaled AI consumer apps t
 - Production-grade UGC content banks: give creators line-by-line scripts with stage directions ("sarcastic tone", "roll your eyes") and camera framing (long/medium/close-up).
 - Micro-optimize viral templates: a top "war is over" template for Sprout was optimized to an exact length of 6.7 seconds, a specific non-90-degree tilt, and exact zoom-in timings.
 
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video.)
+- [09:07] App Store "Top Charts" list with "Glam Up" at #3, above Tinder and Hinge.
+- [09:30] Superwall analytics dashboard: bar chart of "Total Requests", peak ~1.6M.
+- [09:50] TikTok feed: vertical slideshow "Before" (plain face) vs "After" (enhanced makeup), Glam Up branding overlaid.
+- [18:21] Figma app-UI walkthrough: onboarding asks "Beauty goals" and "Skin concerns"; paywall applies a "Blur" effect over the scan results with CTAs "View Results" or "Invite 3 friends"; referral flow shows an invite code + share button.
+- [25:01] Paywall variation: primary prices ($10.99, $12.99); discounted 50%-off exit offer ($4.49, $5.49, $6.49).
+- [27:54] "Leave a Rating" pop-up whose CTA button reads "Yes, I rated it." (used to force navigation progress).
+- [35:43] Google-Sheet prop with a "Job Status" dropdown (e.g. "Accepted") used in marketing videos.
+- [37:30] Sprout app UI: a "Tinder-for-jobs" feed of swipeable job cards; top-bar filter for roles/locations.
+- [41:03] Resume-upload screen labeled "Upload your resume".
+- [41:55] Sprout paywall: interstitial triggered after the user attempts to swipe right on a job.
+
 ### Resources mentioned
 - Tools: Superwall (paywallexperiments.com), RorMax (AI iOS coding), SpyTok (AI TikTok marketer), OneLink (attribution), Stripe.
 - Communities/platforms: Handshake (hiring student UGC creators), influencer Discord chats, Consumer Club Discord.
@@ -338,6 +353,14 @@ TL;DR (Gemini): Daniel pre-sold his app via Instagram DMs, used automated Figma 
 - Batch TikTok slideshows: design a single aesthetic background in Figma, then auto-populate text from an Excel sheet. Once a format gets algorithm traction, switch to heavy app branding (colors, logos, CTAs).
 - Dedicated influencer ad creatives: pay influencers to create a hard-selling dedicated ad and run it to their audience via their page (rather than boosting their organic video).
 - Retention via social-proof milestones: shareable milestones (logging streaks, weight-loss progress) designed for users to post to Instagram stories, driving free product-led growth.
+
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video. Orange/white app aesthetic.)
+- [15:51] Multi-slide onboarding: slide 1 "What is your main goal?" with options "Improve my matches" / "Get more matches" / "Build confidence"; slide 2 an image-heavy "dream result" mock-up of a user's dating profile; slide 3 "How would you describe your current dating life?" with a radio-button list.
+- [16:35] Initial paywall: headline "Your Personalized Action Plan", a vertical carousel of 8 feature cards explaining the subscription value, and a prominent "Continue" CTA at the bottom.
+- [17:23] Post-paywall "aha": an "Upload screenshots of your dating profile" prompt -> a processing screen with a progress bar and "Analyzing your profile..." -> a result dashboard with a numerical score (e.g. "7.4/10") and critique sections for "Images" and "Prompts."
+- [18:40] Consumable IAP upsell: header "AI Photo Packs" with two product cards - "1 Pack - $14.99" and "10 Pack - $49.99" - each with a centered "Purchase" button.
+- [29:34] Gamification screens: an "Upload Progress Photo" module with a "+" button, and a "Milestones" badge system showing "Streak: 30 Days" and "Full Year" with a "Share" icon.
 
 ### Resources mentioned
 - Tools: Superwall (AI paywall experiments), RorMax (AI iOS native coder), Figma, Canva, Excel, SpyTok.
@@ -440,6 +463,12 @@ TL;DR (Gemini): Coconote reached $6.7M ARR and was acquired by Quizlet in 18 mon
 - Evaluate creators on a pyramid: do they want to win (show up to Slack on time), can they reverse-engineer why other videos go viral, and can they set their own trends.
 - Hire full-stack cross-functional engineers: keep the team lean (only 4 engineers) with native mobile devs who also write their own backend code.
 
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video. This video mostly shows creator/marketing content, so only a few app screens appear; the 13-screen onboarding detail is from the audio discussion, not shown frame-by-frame.)
+- [08:52] Coconote app UI shown on a smartphone, overlaid on a lecture-hall video.
+- [11:15] A "Recording..." screen with a large dynamic colorful wave animation centered, and "Coconote.ai" in large bold black text below - the on-camera "wow" feature (branding occupies significant vertical space during recording).
+- [12:15] A "2048 Study Game" screen: the classic number-merging game with study elements integrated; header shows the URL "helpmestudy.com".
+
 ### Resources mentioned
 - Superwall (paywall infra, paywallexperiments.com).
 - viral.app - software to track/manage/optimize the UGC creator program.
@@ -476,6 +505,15 @@ TL;DR (Gemini): Halo AI reached $300k MRR in 45 days via a massive single-format
 - LLM Discord coach for creators: feed transcripts of every 1M+ view video into a custom Discord bot (Claude), connect to the TikTok API for trending keywords, so creators generate new data-backed scripts matching the singular viral format.
 - Structured creator trials: source from Facebook UGC groups, offer a $100 paid trial for 5 videos, grade on posting consistency/communication/intuitive grasp of emotional hooks and pacing (not virality in small samples).
 
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video.)
+- [40:49] Onboarding paywall: a three-page subscription modal headed "Try Halo for free," highlighting "$8.99/week" as the primary tier with a prominent "Start free trial" button at the bottom.
+- [41:26] Secondary paywall: a slightly different modal shown on specific actions (cancelling a trial or abandoning checkout).
+- [41:53] Gated vs non-gated comparison: a non-gated state lets users browse templates/content before subscribing; the gated state is the hard paywall that interrupts the core action.
+- [43:08] Dashboard/home: a grid of AI-generated image examples with categories "Trending" and "Featured" and sub-choices "Cartoons," "Celebrities," "Couples."
+- [43:39] Action/prompt interface: a prompt entry box - upload/select an image, enter a prompt, and tap "Send."
+- [45:22] Account-creation flow triggered immediately after "Send": a sign-in/create-account screen that transitions straight into the hard paywall gate if the user isn't subscribed (the "core action" paywall).
+
 ### Resources mentioned
 - People: Dillian Verma (founder of Halo AI), Joseph Chou (host).
 - Tools: Superwall (paywall infra), Gemini API (core model), Claude (Discord creator bot), Scrape Creators (TikTok keyword/hashtag API), SpyTok.
@@ -506,6 +544,12 @@ Validates the delayed intent-based paywall pattern: a skippable soft paywall at 
 - Anxiety-reducing UI: use delightful, non-threatening design elements (cartoon bees, cute animations) specifically on paywall screens to trigger dopamine, reduce transaction anxiety, and soften the ask.
 - Multi-option tiers: offer a full spectrum of billing frequencies (weekly, monthly, annual) so users self-select their maximum affordable threshold.
 - "Wholesale" sponsorship hack: when sponsoring events/creators, always buy the absolute largest package.
+
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video.)
+- [47:45] Paywall: a vertical stack with a friendly cartoon-bee mascot (large eyes) near the top/center to reduce anxiety; headline "Try Sunflower for free" plus a reminder that users will be notified before the trial ends; the ANNUAL plan is the default highlighted selection; a "no commitment / cancel anytime" notice; bright, clean, welcoming design.
+- [48:52] Paywall interaction: a green check-mark icon next to "Offer applied," signalling an active discount/offer (a successful conversion implementation per the founder).
+- [41:17] Early prototype (for context): a primitive V1 of the AI companion "Sam" as a generic AI-generated bee graphic (the "ugly but functional" first version).
 
 ### Resources mentioned
 - Superwall (paywallexperiments.com - AI-trained paywall optimization).
@@ -708,6 +752,16 @@ TL;DR (Gemini): Jonathan Parra (4,500+ app paywalls) reveals there is no single 
 - Mimic native OS UI: paywalls that look like native Apple/SwiftUI components frequently outperform heavily branded custom designs.
 - Use color contrast for tiers: for multi-tier systems (Plus vs Pro), dynamically change the paywall background color when the user toggles to the higher tier to make it feel explicitly premium.
 
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video.)
+- [05:46] Control vs variant: control shows pricing as "Weekly, Annual, Monthly" with a descriptive CTA; the winning variant simplifies the order, highlights the annual plan, adds a "No commitment, cancel anytime" badge, and changes the CTA to "Continue."
+- [10:24] Trial inclusion: a 3-plan paywall (Annual, Weekly, Monthly) tested against a version that removes Monthly, highlights Annual, and adds a "Start my 3-day trial" CTA.
+- [15:00] "Clear 30" style: a clean step-by-step visual roadmap showing the user's transformation timeline; "No commitment, cancel anytime" in the subtitle.
+- [25:27] Comparison table vs simple UI: a control paywall with a complex pricing table (3/6/12 months) is outperformed by a variant with a large high-quality image of the app in use and a simple "Continue" button.
+- [33:18] Multi-page/component flow: begins with a USP/bullet-list screen, progresses to a visual/video demo of the app, ends with social proof/reviews and the final CTA.
+- [48:08] SwiftUI style: a template using standard Apple design language (SF Pro fonts, familiar list-item styles) for a "native" feel that outperformed custom-designed variants in specific tests.
+- [51:56] High-contrast premium tier: a multi-tier paywall (Pro vs Plus) switches the background from white to dark when the user toggles to "Pro" to visually signal premium status.
+
 ### Resources mentioned
 - Superwall (paywall experimentation), Rotato (3D in-hand video mockups), Webflow.
 - People: Jonathan Parra (Superwall lead designer), Joseph Choy (host).
@@ -738,6 +792,11 @@ TL;DR (Gemini): At 14, Raphael Kramer generated $100k/mo profit by rapidly build
 - Idea generation via comments: find unaddressed consumer problems in TikTok comment sections (a debloating transformation video with 100 comments asking "how did you do this?" = immediate demand for a dedicated app).
 - Faceless UGC at scale: pay high schoolers or Discord users on a strict CPM basis to run faceless "slideshow" TikTok accounts, giving total creative freedom to maximize volume.
 - AI-generated influencer marketing: use hyper-realistic AI influencers to create "before and after" transformation videos, bypassing human creator coordination.
+
+### Visual details (on-screen UI)
+(Gemini frame/visual analysis, Flash-Lite; timestamps as given - verify against the video.)
+- No app onboarding/paywall UI is shown on screen frame-by-frame; the sunk-cost face-scan-before-paywall detail comes from the audio discussion, not a visible demo.
+- [22:29-22:41] The only on-screen tool UI is SpyTok (a browser app): a search bar with "fitness gym workouts", a "Sort by" dropdown set to "most viral", a video thumbnail tagged "106x outlier" / "promotes a fitness app", and a two-slide format example (slide 1 text hook + background image; slide 2 a clear CTA button laid out for conversion).
 
 ### Resources mentioned
 - SpyTok - discover the most viral app-promo TikToks (used by studios like Voodoo and ElevenLabs).
