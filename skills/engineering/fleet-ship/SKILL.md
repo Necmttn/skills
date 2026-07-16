@@ -237,6 +237,19 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
    told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
    shape (build, bug fix, refactor, spike) ends with the verbatim block.**
+   **Skill availability + command triggering (2026-07-16, workbox lesson): a brief NEVER loads a skill by
+   itself.** Skills resolve from the PANE's environment — `~/.claude/skills` of that machine+USER plus its
+   installed plugins — not from the orchestrator's. Before any brief names a skill: (a) **probe the target
+   env once per machine+user** (`ls ~/.claude/skills/<name>`; for a remote pane `ssh <target> 'ls
+   ~/.claude/skills'` — the pane user's home, not yours) and cache the result in the ledger; (b) a named
+   skill that's absent **silently degrades to prose** — the pane "sort of follows" the workflow with no
+   gates loaded, which reads as compliance and isn't — so on a miss either sync skills to the box first or
+   fall back to the non-Claude discipline variant (inline text works on every engine and every machine);
+   (c) to **force-trigger** a skill/command in a claude pane, send the slash command as its OWN message
+   (`agent send "/skill-name <args>"` → `send-keys Enter`), never buried mid-paragraph, then `agent read`
+   and confirm the command/skill banner appears before sending the follow-up context; plugin-namespaced
+   skills (`superpowers:*`) additionally require that plugin installed under the pane's user — file-sync
+   alone never provides them.
 5. **Arm waiter + monitor.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on
    idle; AND ensure the fleet **liveness monitor** loop is running (it sweeps this pane for stuck/errored/dead).
 6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane, then three passes before your judgment:

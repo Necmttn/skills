@@ -50,6 +50,21 @@ fix, refactor, spike). Live lesson (2026-07-02): a freehanded bug-fix brief had 
 TDD sentence, but never told the pane to plan first or use subagent-driven development - the pane ran
 unstructured. Rich context does not substitute for the block; the block is what makes panes run the chain.
 
+### Skill availability probe (run BEFORE choosing the brief variant)
+A brief never loads a skill - the pane resolves skills from ITS OWN machine+user environment. Per
+machine+user (once per fleet run, ledger-cached):
+- probe: `ls ~/.claude/skills` locally, or `ssh <target> 'ls ~/.claude/skills'` for a remote pane
+  (the PANE user's home). Plugin-namespaced skills (`superpowers:*`, `caveman:*`) need the plugin
+  installed under that user - a file listing won't show them; check `claude plugins list` there if in doubt.
+- every skill the Claude-variant block names must be present; ANY miss -> use the non-Claude variant
+  (inline discipline) for that pane, or sync skills to the box first and re-probe.
+- force-triggering a skill/command in a claude pane: send the slash command as its OWN message -
+  `herdr agent send <name> "/skill-name <args>"` then `herdr pane send-keys <pane> Enter` - then
+  `agent read` to confirm the command/skill banner loaded before sending follow-up context. A skill
+  named mid-paragraph in a long brief is advisory prose, not a trigger.
+- failure mode this prevents (2026-07-16 workbox): a remote pane briefed with skill names it didn't
+  have "followed along" without plan/TDD/verification gates - output looked compliant, wasn't.
+
 ### Discipline block - Claude panes (fable/opus/sonnet; they have the Skill tool - name the skills)
 > WORKFLOW (mandatory): FIRST invoke superpowers:writing-plans and write a short plan (decompose into tasks,
 > name files+tests, sequence). THEN build with superpowers:subagent-driven-development - strict TDD per task,
