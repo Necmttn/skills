@@ -85,3 +85,50 @@ window.fetch = async (...a) => {
 ```
 
 Also wrap XHR if a call is missing (the builder uses both). See git history of this repo for the full hook.
+
+## Paywall remote config (sniffed 2026-07-16, dotself run)
+
+`PUT in-apps/paywalls/{paywall_id}/` is **full-replace**: a body with only
+`remote_configs` 400s with `title/use_paywall_builder/products: field required`.
+GET the paywall document, swap `remote_configs`, PUT the whole thing back:
+
+```json
+{ "...": "everything from the GET", "remote_configs": [{ "locale": "en", "data": "<json string>" }] }
+```
+
+Paywalls + paywall-type placements + audiences are all creatable via the
+official `bunx adapty` CLI (`paywalls create`, `placements create --audiences
+'[{"segment_ids":[...],"paywall_id":"...","priority":0}]'`) - priority 0 = top
+audience. Product index order in `paywalls create` = SDK display order.
+
+**Segments have no CLI/API create surface** (CLI is list-only; portal path not
+found) - create via dashboard UI: Profiles & Segments → Segments → Create, and
+"Create custom attribute" inline (name/key/type/enumerated values).
+
+## SDK paywall variations verify (paywall-type placements)
+
+```
+GET https://api.adapty.io/api/v1/sdk/in-apps/{pk_prefix}/paywall/variations/{placement_developer_id}/{md5(profile_id)}/
+Authorization: Api-Key {full_public_key}
+adapty-sdk-version: 3.4.0
+adapty-sdk-profile-id: {profile_id}
+adapty-profile-segment-hash: {segment_hash}
+adapty-paywall-locale: en
+adapty-paywall-builder-version: 3
+```
+
+- Profile must exist: `POST /api/v1/sdk/analytics/profiles/{profile_id}/` with
+  `{"data":{"id":"...","type":"adapty_analytics_profile","attributes":{"store":"app_store","custom_attributes":{...}}}}`
+  (Content-Type `application/vnd.api+json`). The response's
+  `data.attributes.segment_hash` is the required header value.
+- Responses are cached per profile hash: a profile fetched BEFORE a custom
+  attribute write can keep serving its old audience's variation long after.
+  Verify segment routing with a fresh profile whose attributes are set at
+  create time.
+
+## Token extraction vs browser guard
+
+The Chrome extension may block returning the raw `localStorage['adapty/token']`
+string to the agent (base64-exfil guard). Don't fight it: run the portal fetch
+calls inside the page context (`javascript_tool`), reading the token from
+localStorage in-page so it never leaves the browser.
