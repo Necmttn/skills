@@ -11,12 +11,19 @@ SKILL.md names; edit either, same file). The table below is the narrative compan
 | codex-spark (gpt-5.3-codex-spark) | `codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.3-codex-spark` | SMALL well-defined mechanical (crisp spec, 1-3 files, renames/mop-ups/precise edits); 1000+ tok/s on Cerebras, near-instant | yes |
 | codex fast-mode | `codex --dangerously-bypass-approvals-and-sandbox -c 'service_tier="fast"' -c features.fast_mode=true` | critical-path mechanical needing FULL gpt-5.5 capability + speed; 1.5x speed at **2.5x credit burn** — per chunk only, never bulk | yes |
 | pigrok (Grok-4.3) | `pi --model xai-oauth/grok-4.3 --approve` | burst overflow only (codex saturated) | verify on first spawn; fall back to codex if not |
-| fable (Claude) | `claude --model fable --dangerously-skip-permissions` | orchestrator, judgment, user-facing (UI/copy/API design), review, dogfood | yes |
-| opus (Claude) | `claude --model opus --dangerously-skip-permissions` | fallback for fable lane; review co-owner | yes |
+| fable (Claude) | `claude --model fable --dangerously-skip-permissions` | orchestrator, scoping/planning/spec authoring, review of plans/reports/diffs ONLY (2026-07-12 steer - never a build or dogfood lane) | yes |
+| opus (Claude) | `claude --model opus --dangerously-skip-permissions` | judgment lane (reactor-subtle, security, multi-file design); review co-owner; fable fallback | yes |
 | opus fast-mode | `claude --model opus --settings '{"fastMode": true}' --dangerously-skip-permissions` | critical-path judgment chunk where latency beats cost; billed higher while active | yes |
-| sonnet (Claude) | `claude --model sonnet --dangerously-skip-permissions` | taste-floor user-facing work when fable/opus lanes busy; thin codex-exec wrapper in subagents | yes |
+| sonnet (Claude) | `claude --model sonnet --dangerously-skip-permissions` | taste-floor user-facing work when opus lane busy; **dogfood default**; thin codex-exec wrapper in subagents | yes |
 
-Never Haiku. Always pin `--model` on claude panes. Escalation: gate failure on a cheaper lane = re-spawn same worktree on smarter lane, no asking (intelligence > taste > cost).
+Never Haiku on panes or any review/judgment (read-only locate SUBAGENT dispatches may use it per
+`efficient-dispatch`). Always pin `--model` on claude panes. Thinking level is pinnable per claude pane too:
+`--effort low|medium|high|xhigh|max` (verified 2026-07-16) - dogfood/mechanical-ish claude spawns take
+`--effort low` or `medium`; judgment/review panes leave it unset (session default). CAUTION: an invalid
+effort value only WARNS and silently falls back to the default - spell it exactly. Subagent dispatches from the orchestrator or
+inside Claude panes follow `efficient-dispatch`: mechanical → explicit `model:'sonnet'`, pure locate →
+`'haiku'`, judgment/review → strong model. Escalation: gate failure on a cheaper lane = re-spawn same
+worktree on smarter lane, no asking (intelligence > taste > cost).
 
 **Fast-lane mechanics (verified live 2026-07-02):**
 - **Claude:** NO `--fast` CLI flag exists. Launch opt-in = `--settings '{"fastMode": true}'` (the `flagSettings`
@@ -45,7 +52,10 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > failing test FIRST (red), then green, then refactor. SEAM RULE (superpowers testing-anti-patterns.md): mock
 > ONLY non-deterministic leaves (model/LLM, clock, net), NEVER the code path this chunk is named after; add
 > one test asserting the real observable effect at the real seam, not that a mocked dispatch was called
-> (delete-the-mock heuristic). WORKTREE GUARD: you and EVERY subagent you dispatch work ONLY in this worktree
+> (delete-the-mock heuristic). SUBAGENT ROUTING (efficient-dispatch): every implementer/mechanical subagent
+> you dispatch sets model:'sonnet' explicitly (pure search/locate: 'haiku'); reviewer/judgment subagents keep
+> your model - never send review to a cheaper model, never let a mechanical dispatch inherit yours.
+> WORKTREE GUARD: you and EVERY subagent you dispatch work ONLY in this worktree
 > (pwd must match it before any git command); NEVER cd to or commit in the primary checkout - two live
 > incidents (2026-07-04/05) had task subagents commit to main's checkout (recovered by cherry-pick + reset,
 > uncommitted work at risk). Run gates FROM the worktree too (a gate run from the main checkout silently
@@ -232,6 +242,8 @@ Move a card: re-run `item-edit` with the target Status option id (Todo→In Prog
 > orchestrator triages findings into kanban cards. If the local stack will not come up cleanly, that IS the
 > top finding - report it.
 
+Spawn dogfood panes on **sonnet** (`claude --model sonnet --dangerously-skip-permissions`); opus for
+reactor-subtle merges; never fable (scoping/planning/review only).
 Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
 > GATE dogfood panes on the REPORT FILE, not pane status: brief them to write findings to a known path (e.g. scratchpad/dogfood-output/report.md); the waiter polls for that file's existence. herdr status for app-driving panes flickers to `unknown` and breaks status-based waiters (a real 'stuck' — the loop went blind while the dogfood was actually done).
 

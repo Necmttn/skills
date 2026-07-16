@@ -47,6 +47,9 @@ build mid-compile.
   `superpowers:using-git-worktrees` internally). **Seam discipline:** its `testing-anti-patterns.md` is the authority — mock only non-deterministic *leaves* (model/LLM, clock, net), NEVER the code path the test is named after.
 - **Review:** `/review-all` = `simplify` + `/codex:review` + `/codex:adversarial-review`; plus
   `superpowers:requesting-code-review` / `superpowers:receiving-code-review` for the judgment on findings.
+- **Route dispatches:** `efficient-dispatch` - every Agent-tool dispatch (orchestrator or Claude pane) is
+  classified mechanical-vs-judgment and mechanical ones carry an explicit cheap `model:`; `ax dispatches`
+  measures the inherit rate afterwards.
 - **Finish:** `superpowers:verification-before-completion` (gates) → `superpowers:finishing-a-development-branch`
   (PR) → orchestrator merges → `commit` conventions.
 - **Dogfood:** `dogfood` (+ `verify` / `run` to launch the app).
@@ -73,7 +76,16 @@ Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX,
 - **User-facing** (UI, copy, API design) needs **taste >= 7** -> sonnet-5/opus-4.8/fable-5, never gpt-5.5 solo.
 - **Reviews of plans/implementations** -> fable-5 or opus-4.8, optionally gpt-5.5 (`codex review`) as an
   extra independent perspective (`/review-all` already includes it).
-- **NEVER use Haiku.**
+- **Subagent dispatches (Agent tool) - classify EVERY dispatch before sending, then the model field follows
+  (REQUIRED SUB-SKILL: `efficient-dispatch`).** A bare dispatch silently inherits the caller's model - from
+  the orchestrator that is fable-5, the most expensive lane (same trap as an unpinned `claude` pane; live
+  lesson 2026-07-16: fleet runs bled tokens on default-model launches for non-judgment work). Routing:
+  pure search/locate/pattern-find → `model:'haiku'`; mechanical implementer / fix subagents / bulk
+  reads-for-a-fact / codex-exec wrappers → `model:'sonnet'`; judgment (review verdicts, design synthesis,
+  gate decisions) → keep the strong model (inherit fable/opus deliberately - cheap reviewers miss real bugs).
+  Applies to the orchestrator AND to Claude panes (their discipline block carries the same rule).
+- **NEVER use Haiku for panes, builds, or any review/judgment.** The one sanctioned use is read-only
+  search/locate subagent dispatches per `efficient-dispatch`.
 - **gpt-5.5 inside subagents/Workflows** (the `model` param takes Claude models only): thin Claude wrapper
   agent `model:'sonnet', effort:'low'` whose prompt writes a self-contained codex prompt, runs `codex exec`
   via Bash, and returns the result; investigation/data-analysis -> `codex exec -s read-only` with a
@@ -142,7 +154,6 @@ it into this table as the new default.
    **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
    told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
    shape (build, bug fix, refactor, spike) ends with the verbatim block.**
-<<<<<<< HEAD
 5. **Arm waiter + monitor.** Background `herdr agent wait <name> --status idle` (re-arming) → re-invokes you on
    idle; AND ensure the fleet **liveness monitor** loop is running (it sweeps this pane for stuck/errored/dead).
 6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane, then three passes before your judgment:
@@ -152,15 +163,17 @@ it into this table as the new default.
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
    mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
    code*; a behavior-bearing chunk with only mocked-dispatch tests is NOT done → send back) →
-   `superpowers:receiving-code-review` judgment → one fix subagent for Critical/Important →
+   `superpowers:receiving-code-review` judgment → one fix subagent (`model:'sonnet'` - mechanical, findings
+   are its spec; escalate on a failed re-gate) for Critical/Important →
    `superpowers:finishing-a-development-branch`.
    **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
    reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
    tiebreak, never a coin flip. Then **squash-merge to main.**
 7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
-   fable/opus `dogfood` pane: run the app, exercise the chunk's new behavior + a core smoke, report → findings
-   become **new kanban cards** linked to the chunk.
+   **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-4.8 for reactor-subtle merges;
+   never fable - scoping/planning/review only per the 2026-07-12 steer): run the app, exercise the chunk's new
+   behavior + a core smoke, report → findings become **new kanban cards** linked to the chunk.
 9. **Fan out.** Spawn the next wave's *independent* chunks in parallel; sequence shared-file/reactor chunks.
 
 ## Liveness monitor - the SECOND spine (waiters catch *done*; the monitor catches *stuck/errored/dead*)
@@ -221,7 +234,8 @@ orchestrator can resume from those alone.
   must defer its message (live lesson: a starvation steering was correctly deferred for a full cycle because
   the orchestrator parked with a half-typed draft). Submit or clear before yielding.
 - Spawn the *building* on panes; keep heavy reading/searching in **subagents** (they return conclusions,
-  not file dumps), so your window holds coordination only.
+  not file dumps), so your window holds coordination only - and those dispatches are mechanical, so they
+  carry `model:'sonnet'` (`'haiku'` for pure locate), never the inherited orchestrator model.
 
 ## Hard rules (live-dogfood lessons)
 - **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt

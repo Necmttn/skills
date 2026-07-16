@@ -75,6 +75,15 @@
       "origin": "demoted 2026-07-02"
     },
     {
+      "id": "dogfood",
+      "match": "tracer-bullet dogfood of a merged chunk: run the app, exercise the new behavior + core smoke, report findings (no fixing)",
+      "engine": "sonnet",
+      "argv": "claude --model sonnet --dangerously-skip-permissions",
+      "enabled": true,
+      "reason": "drive-app-and-report is taste-floor work (sonnet taste 7); escalate to opus for reactor-subtle merges; fable excluded per 2026-07-12 scoping/planning/review-only steer",
+      "origin": "user 2026-07-16: agent launches were inheriting the expensive default model on non-judgment work"
+    },
+    {
       "id": "gate",
       "match": "review + gate + merge",
       "engine": "orchestrator",
