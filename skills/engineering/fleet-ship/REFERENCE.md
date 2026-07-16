@@ -29,6 +29,18 @@ worktree on smarter lane, no asking (intelligence > taste > cost).
 tandem/review, wasteful on mechanical lanes. Mechanical + spark lanes pin `-c model_reasoning_effort="medium"`
 (2026-07-16); tandem pins `"max"` explicitly. Escalate effort together with the lane on gate failure.
 
+**Codex pane launch protocol (verified live 2026-07-16 - REQUIRED, panes die otherwise):** codex TUI
+launched with `--dangerously-bypass-approvals-and-sandbox` boots into a Yes/No trust MODAL, and ANY text
+delivered while the modal is up (`agent send`, `pane send-text`) CRASHES the pane - this reads as "codex
+died on brief". Protocol: (1) pass the brief pointer AS AN ARGUMENT at spawn:
+`herdr agent start <chunk> --cwd <wt> --tab <tab> -- codex --dangerously-bypass-approvals-and-sandbox "Read BRIEF.md and execute it fully"`;
+(2) wait for boot (~10s), then send ONE bare `herdr pane send-keys <pane> Enter` to accept the modal - codex
+then runs the argv prompt; (3) never send further text until status shows it working past the modal.
+Headless alternative when no steering is needed: `codex exec --dangerously-bypass-approvals-and-sandbox "<brief>"`
+(no TUI, no modal; terminal status `done`; NOTE codex exec often skips final commit/signal steps - expect the
+waiter's READY_UNCOMMITTED path). Unquoted `-c key=value` overrides are a separate instant-death (TOML parse):
+always single-quote, e.g. `-c 'model_reasoning_effort="medium"'`.
+
 **Fast-lane mechanics (verified live 2026-07-02):**
 - **Claude:** NO `--fast` CLI flag exists. Launch opt-in = `--settings '{"fastMode": true}'` (the `flagSettings`
   source is the exact check in the binary, and the only path that works headless/SDK). Opus 4.8/4.7 only —
