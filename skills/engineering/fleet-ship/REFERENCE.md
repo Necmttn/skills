@@ -7,7 +7,7 @@ SKILL.md names; edit either, same file). The table below is the narrative compan
 
 | Lane | CLI (unattended) | Use | herdr tracks status? |
 |---|---|---|---|
-| codex (gpt-5.5) | `codex --dangerously-bypass-approvals-and-sandbox` | mechanical build (effectively free) + `codex review` extra review perspective | yes |
+| codex (gpt-5.5) | `codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort="medium"` | mechanical build (effectively free) + `codex review` extra review perspective | yes |
 | codex-spark (gpt-5.3-codex-spark) | `codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.3-codex-spark` | SMALL well-defined mechanical (crisp spec, 1-3 files, renames/mop-ups/precise edits); 1000+ tok/s on Cerebras, near-instant | yes |
 | codex fast-mode | `codex --dangerously-bypass-approvals-and-sandbox -c 'service_tier="fast"' -c features.fast_mode=true` | critical-path mechanical needing FULL gpt-5.5 capability + speed; 1.5x speed at **2.5x credit burn** — per chunk only, never bulk | yes |
 | pigrok (Grok-4.3) | `pi --model xai-oauth/grok-4.3 --approve` | burst overflow only (codex saturated) | verify on first spawn; fall back to codex if not |
@@ -24,6 +24,10 @@ effort value only WARNS and silently falls back to the default - spell it exactl
 inside Claude panes follow `efficient-dispatch`: mechanical → explicit `model:'sonnet'`, pure locate →
 `'haiku'`, judgment/review → strong model. Escalation: gate failure on a cheaper lane = re-spawn same
 worktree on smarter lane, no asking (intelligence > taste > cost).
+
+**Codex thinking level:** global `~/.codex/config.toml` sets `model_reasoning_effort = "max"` — right for
+tandem/review, wasteful on mechanical lanes. Mechanical + spark lanes pin `-c model_reasoning_effort="medium"`
+(2026-07-16); tandem pins `"max"` explicitly. Escalate effort together with the lane on gate failure.
 
 **Fast-lane mechanics (verified live 2026-07-02):**
 - **Claude:** NO `--fast` CLI flag exists. Launch opt-in = `--settings '{"fastMode": true}'` (the `flagSettings`
