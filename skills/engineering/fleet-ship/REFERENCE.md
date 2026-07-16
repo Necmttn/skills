@@ -255,6 +255,13 @@ Move a card: re-run `item-edit` with the target Status option id (Todo→In Prog
 > then follow the submit protocol), dead waiters/monitor. On a finding: send ONE terse message to the
 > orchestrator (herdr agent send <orchestrator-name> "TANDEM: <finding + suggested action>" then a separate
 > Enter); if the same cause blocks 2 consecutive cycles, ring the bell (fleetctl attn <fleet-id> "...").
+> (1b) ROTATION TRIGGERS - you, not the orchestrator, hold these. Each loop: read the orchestrator
+> pane's VISIBLE bottom lines (herdr agent read <orchestrator-name> --source visible --lines 8) and grep
+> for the context indicator (percent + "auto-compact"/"context left"); if context usage >= ~70-75%, OR the
+> ledger's last rotation/start stamp is > 5h old, OR the same rotation-blocking cause appears 2 loops in a
+> row, send EXACTLY ONE atomic instruction: "ROTATE NOW: write the rotation handoff per REFERENCE schema,
+> commit it, then park with an empty prompt" - then verify next loop that a fresh handoff commit exists and
+> the prompt is empty; if not after 2 loops, ring the bell (incident).
 > (2) JUDGE - when you receive a message starting TANDEM-JUDGE:, read ONLY the pointers given (plan
 > section, diff paths, review verdicts) and reply with a terse verdict + 3-line reasoning. You are ADVISORY:
 > never edit files, merge, spawn, or kill anything. Read-only on the repo.

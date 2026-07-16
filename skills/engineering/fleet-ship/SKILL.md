@@ -139,6 +139,13 @@ reasoning alongside the orchestrator as a second pair of frontier eyes:
   `herdr agent list`; catch starvation (no wake progress), context bloat past the rotation threshold,
   parked-draft blocking, dead waiters/monitor. Follows the hard rules: commits-alive check before flagging
   stuck; parked-draft submit protocol; 2 same-cause blocked cycles = incident, ring the bell.
+- **Rotation trigger-holder (skills#2):** tandem computes the rotation triggers EXTERNALLY — the
+  orchestrator's own judgment degrades exactly when its window fills, so it never self-reports. Each sweep:
+  grep the orchestrator pane's visible bottom lines for the context indicator (Claude Code prints
+  "% ... auto-compact" / "context left" once the window fills); read the ledger's last rotation stamp for
+  the 4-6h wall-clock ceiling. On ANY trigger: send the orchestrator the ONE atomic instruction — "ROTATE
+  NOW: write the handoff doc (REFERENCE schema), commit it, park with an empty prompt" — and ring the bell
+  if it hasn't parked within 2 sweeps (2 same-cause blocked cycles = incident).
 - **Judgment assist:** the orchestrator sends `TANDEM-JUDGE: <question> + pointers (plan section, diff
   paths, both reviews)` for gate tiebreaks, risky merges, ambiguous designs; tandem returns a terse verdict
   + reasoning. ADVISORY ONLY — the orchestrator still owns review+gate+merge (never delegated).
