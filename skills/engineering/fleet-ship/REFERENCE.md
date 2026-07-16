@@ -1,5 +1,19 @@
 # Fleet Ship - Reference
 
+## Machine-namespaced identity
+The slug minted by `fleetctl join --name <slug>` is the machine id. Keep these three values distinct:
+
+- `NAME=<chunk-id>` — bare, server-local herdr agent name; the pane label displays the same chunk id.
+- `REPORT_NAME=<machine-slug>/<chunk-id>` — required in every ledger/card/map entry, lifecycle event,
+  attention line, archive/handoff, and report that leaves the machine.
+- `FLEET_TAB_LABEL=fleet:<epic>` on primary; `fleet:<epic>@<slug>` on every non-primary machine.
+
+Template placeholders `<name>` mean the bare local herdr name; `<report-name>` means the qualified external
+identity. Drive another server only by executing the whole command there, for example
+`ssh <host> 'herdr agent send <name> "..."'`; keep `<host>` explicit on every read/send/wait/pane/tab call.
+Never assume names are globally unique, point a local client at a remote socket, or combine a driving
+subcommand with `herdr --remote`; `--remote` is interactive UI-attach only.
+
 ## Engine lanes
 **Live routing config: [`fleet-routing.json`](fleet-routing.json) in THIS skill dir** — the canonical lane
 table the orchestrator reads at fleet start (symlinked from `~/.ax/fleet-routing.json`, which is the path
@@ -34,8 +48,11 @@ launched with `--dangerously-bypass-approvals-and-sandbox` boots into a Yes/No t
 delivered while the modal is up (`agent send`, `pane send-text`) CRASHES the pane - this reads as "codex
 died on brief". Protocol: (1) pass the brief pointer AS AN ARGUMENT at spawn:
 `herdr agent start <chunk> --cwd <wt> --tab <tab> -- codex --dangerously-bypass-approvals-and-sandbox "Read BRIEF.md and execute it fully"`;
-(2) wait for boot (~10s), then send ONE bare `herdr pane send-keys <pane> Enter` to accept the modal - codex
-then runs the argv prompt; (3) never send further text until status shows it working past the modal.
+(on another machine: `ssh <host> 'herdr agent start <chunk> --cwd <wt> --tab <tab> -- codex
+--dangerously-bypass-approvals-and-sandbox "Read BRIEF.md and execute it fully"'`);
+(2) wait for boot (~10s), then send ONE bare `herdr pane send-keys <pane> Enter` on that server
+(`ssh <host> 'herdr pane send-keys <pane> Enter'` from elsewhere) to accept the modal - codex then runs the
+argv prompt; (3) never send further text until status shows it working past the modal.
 Headless alternative when no steering is needed: `codex exec --dangerously-bypass-approvals-and-sandbox "<brief>"`
 (no TUI, no modal; terminal status `done`; NOTE codex exec often skips final commit/signal steps - expect the
 waiter's READY_UNCOMMITTED path). Unquoted `-c key=value` overrides are a separate instant-death (TOML parse):
@@ -73,7 +90,8 @@ machine+user (once per fleet run, ledger-cached):
 - force-triggering a skill/command in a claude pane: send the slash command as its OWN message -
   `herdr agent send <name> "/skill-name <args>"` then `herdr pane send-keys <pane> Enter` - then
   `agent read` to confirm the command/skill banner loaded before sending follow-up context. A skill
-  named mid-paragraph in a long brief is advisory prose, not a trigger.
+  named mid-paragraph in a long brief is advisory prose, not a trigger. For a remote pane, execute each
+  of those commands separately as `ssh <host> 'herdr ...'`.
 - failure mode this prevents (2026-07-16 workbox): a remote pane briefed with skill names it didn't
   have "followed along" without plan/TDD/verification gates - output looked compliant, wasn't.
 
@@ -93,10 +111,11 @@ machine+user (once per fleet run, ledger-cached):
 > tests the wrong tree). GATES before done (superpowers:verification-before-completion): <repo gates,
 > e.g. bun run typecheck 0, bun run verify:effect 0, named suites green - capture tsc's REAL exit code, never
 > pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run git add -A && git commit
-> (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA +
-> test summary + concerns. Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the
-> orchestrator owns review + merge. SIGNAL STEP (mandatory, LAST, even on failure): append one line
-> `date -Iseconds` + " <chunk-id> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on
+> (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report as
+> `<report-name>`: commit SHA + test summary + concerns. Do NOT pause to ask how to finish; do NOT push,
+> open a PR, or merge - the orchestrator owns review + merge. SIGNAL STEP (mandatory, LAST, even on failure):
+> append one line
+> `date -Iseconds` + " <report-name> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on
 > BLOCKED/ERROR write the detail + what you need into REPORT.md at the worktree root - stopping without
 > signaling means the orchestrator may never see your result.
 
@@ -110,9 +129,10 @@ machine+user (once per fleet run, ledger-cached):
 > conventions. WORKTREE GUARD: work ONLY in this worktree; never cd to or commit in the primary checkout;
 > run gates from the worktree. GATES before done: <repo gates, real exit codes - never pipe tsc through
 > tail/grep before checking $?>. Then run git add -A && git commit (one conventional commit;
-> an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA + test summary + concerns.
+> an uncommitted worktree is treated as UNFINISHED), STOP and report as `<report-name>`: commit SHA + test
+> summary + concerns.
 > Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge. SIGNAL
-> STEP (mandatory, LAST, even on failure): append one line `date -Iseconds` + " <chunk-id>
+> STEP (mandatory, LAST, even on failure): append one line `date -Iseconds` + " <report-name>
 > DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on BLOCKED/ERROR write the detail + what you
 > need into REPORT.md at the worktree root - stopping without signaling means the orchestrator may never
 > see your result.
@@ -121,7 +141,8 @@ machine+user (once per fleet run, ledger-cached):
 Example of CONTEXT + block fused for a standard build chunk; for other shapes (bug fix, refactor) write your
 own context and append the block above.
 > Act as a focused implementer for ONE chunk. Read <goal-brief path> (ship-style + chunk specs). Your
-> chunk: <ID> - <objective>. You are ALREADY in the isolated worktree on branch <branch> off main; work
+> chunk: local herdr name <ID>, external report name <report-name> - <objective>. You are ALREADY in the
+> isolated worktree on branch <branch> off main; work
 > here. FIRST write a short plan (decompose into tasks, name files+tests, sequence) - claude panes: use
 > superpowers:writing-plans. THEN build test-first per task (red→green→refactor) - claude panes: use
 > superpowers:subagent-driven-development. SEAM RULE: mock ONLY non-deterministic leaves (model/LLM, clock,
@@ -140,22 +161,23 @@ idle↔working → notification storm. Gate the waiter on a polled `idle|done` s
 **commit beyond origin/main** (= chunk done).
 `/tmp/herdr_wait.sh`:
 ```sh
-P="$1"; WT="$2"   # agent NAME (chunk id; pane id also works), worktree path (commit-gate)
+P="$1"; WT="$2"; REPORT_NAME="${3:?pass machine-slug/chunk-id}"   # P stays the bare local agent name
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 160); do
   herdr agent wait "$P" --status idle --timeout 90000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
   case "$(st)" in idle|done) ;; *) sleep 2; continue;; esac
   if [ -n "$WT" ]; then
     c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
-    [ "${c:-0}" -gt 0 ] && { echo "DONE: pane $P committed $c"; exit 0; }
+    [ "${c:-0}" -gt 0 ] && { echo "DONE:$REPORT_NAME committed=$c"; exit 0; }
     sleep 25   # idle but uncommitted = still holding → keep waiting
-  else echo "IDLE_OR_DONE: pane $P"; exit 0; fi
+  else echo "IDLE_OR_DONE:$REPORT_NAME"; exit 0; fi
 done
-echo "TIMEOUT: $P"; exit 0
+echo "TIMEOUT:$REPORT_NAME"; exit 0
 ```
 NOTE (2026-07-05): if the orchestrator's harness reaps long-running background shells (waiters killed
 repeatedly), fall back to ScheduleWakeup/timed polling - less responsive, kill-proof.
-Run **in the background** per active pane: `bash /tmp/herdr_wait.sh <name> <worktree>` (run_in_background) →
+Run **on the pane's machine** in the background per active pane:
+`bash /tmp/herdr_wait.sh <name> <worktree> <report-name>` (through `ssh <host> '...'` when remote) →
 it exits only on polled `idle|done` plus a real commit → the harness re-invokes the orchestrator → sweep.
 (Pass the worktree to commit-gate; omit it only for doc/spec panes that may legitimately finish with no
 further commit.)
@@ -169,31 +191,31 @@ further commit.)
 
 Corrected canonical build waiter:
 ```sh
-P="$1"; WT="$2"; NAME="${3:-$1}"   # P = agent name (chunk id); agent wait/get resolve names natively
+P="$1"; WT="$2"; REPORT_NAME="${3:?pass machine-slug/chunk-id}"   # P stays the bare local name
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 240); do
   herdr agent wait "$P" --status idle --timeout 8000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
   case "$(st)" in idle|done) ;; *) sleep 2; continue;; esac
   sleep 4; case "$(st)" in idle|done) ;; *) continue;; esac              # settle; guard idle flaps
   c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null)
-  [ "${c:-0}" -gt 0 ] && { echo "READY:$NAME committed=$c"; exit 0; }
-  [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ] && { echo "READY_UNCOMMITTED:$NAME idle+dirty"; exit 0; }
+  [ "${c:-0}" -gt 0 ] && { echo "READY:$REPORT_NAME committed=$c"; exit 0; }
+  [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ] && { echo "READY_UNCOMMITTED:$REPORT_NAME idle+dirty"; exit 0; }
   sleep 4
 done
-echo "TIMEOUT:$NAME"; exit 1
+echo "TIMEOUT:$REPORT_NAME"; exit 1
 ```
 
 **Dogfood / non-committing panes need a STABLE-IDLE gate** (they never commit, and flap idle↔working while
 driving a running app, so commit-gate and bare-idle both fail). "Done" = a polled `idle|done` status both
 before AND after a settle pause:
 ```sh
-P="$1"
+P="$1"; REPORT_NAME="${2:?pass machine-slug/chunk-id}"   # P stays the bare local name
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 120); do
   herdr agent wait "$P" --status idle --timeout 90000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
   case "$(st)" in idle|done) ;; *) sleep 2; continue;; esac
   sleep 45                                                               # settle
-  case "$(st)" in idle|done) echo "STABLE-IDLE: $P"; exit 0;; esac       # parse failure/unknown stays running
+  case "$(st)" in idle|done) echo "STABLE-IDLE:$REPORT_NAME"; exit 0;; esac # parse failure/unknown stays running
 done
 ```
 
@@ -210,6 +232,7 @@ Error signatures (grep the tail case-insensitively - extend per engine):
 `/tmp/herdr_monitor.sh` - sweeps ALL active fleet panes; state file diffs progress across sweeps:
 ```sh
 STATE="${1:-/tmp/herdr_monitor_state}"; STALL_SWEEPS="${2:-4}"   # 4 sweeps × ~120s ≈ 8 min stuck-threshold
+MACHINE_SLUG="${MACHINE_SLUG:?export the fleetctl join machine slug}"
 # export NAMES="chunk-a chunk-b …" (your fleet's chunk ids) OR FLEET_TAB=<fleet tab id> before running - scoping is mandatory
 SIG='out of credits|rate.?limit|429| 403 | 5[0-9][0-9] |ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found'
 touch "$STATE"
@@ -218,14 +241,15 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
   # Set NAMES to your chunk ids ("chunk-a chunk-b …") OR filter agent list by your fleet tab id.
   NAMES="${NAMES:-$(herdr agent list --tab "$FLEET_TAB" | python3 -c 'import sys,json;[print(a["name"]) for a in json.load(sys.stdin)["result"]["agents"] if a.get("name")]' 2>/dev/null)}"
   for N in $NAMES; do
+    REPORT_NAME="$MACHINE_SLUG/$N"
     WT=".claude/worktrees/$N"
-    g=$(herdr agent get "$N" 2>/dev/null); [ -z "$g" ] && { echo "DEAD:$N gone from agent list"; continue; }   # vanished → ring+respawn
+    g=$(herdr agent get "$N" 2>/dev/null); [ -z "$g" ] && { echo "DEAD:$REPORT_NAME gone from agent list"; continue; }   # vanished → ring+respawn
     st=$(printf '%s' "$g" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null)
     tail=$(herdr agent read "$N" --source recent --lines 40 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])' 2>/dev/null)
     # ERRORED - ring NOW, don't wait out the stall window
     if printf '%s' "$tail" | grep -Eiq "$SIG"; then
       line=$(printf '%s' "$tail" | grep -Ei "$SIG" | tail -1)
-      echo "ERRORED:$N :: $line"; continue
+      echo "ERRORED:$REPORT_NAME :: $line"; continue
     fi
     # progress fingerprint: status + tail-hash + commits-beyond-main
     c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
@@ -235,7 +259,7 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
     if [ "$fp" = "$prev" ]; then cnt=$((cnt+1)); else cnt=0; fi
     grep -v "^$N	" "$STATE" > "$STATE.tmp" 2>/dev/null; printf '%s\t%s\t%s\n' "$N" "$fp" "$cnt" >> "$STATE.tmp"; mv "$STATE.tmp" "$STATE"
     # STUCK - no change for STALL_SWEEPS while NOT idle/done (idle/done is the waiter's job, not a stall)
-    case "$st" in idle|done) : ;; *) [ "$cnt" -ge "$STALL_SWEEPS" ] && echo "STUCK:$N status=$st unchanged ${cnt}×";; esac
+    case "$st" in idle|done) : ;; *) [ "$cnt" -ge "$STALL_SWEEPS" ] && echo "STUCK:$REPORT_NAME status=$st unchanged ${cnt}×";; esac
   done
   sleep 120   # backpressure between sweeps (fine inside a background script - same as the waiter scripts above)
 done
@@ -250,29 +274,34 @@ back to a `ScheduleWakeup`-timed sweep that runs the loop body ONCE per orchestr
 ```sh
 herdr agent read <name> --source visible --lines 30 | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"]["read"]["text"])'
 herdr agent get <name>   # {agent_status: idle|working|blocked|done|unknown}; .result.agent.pane_id → pane id for pane-only cmds
+ssh <host> 'herdr agent read <name> --source visible --lines 30'   # required form from another machine
+```
 
 ## Archive a pane result before close (housekeeping)
 ```sh
+# NAME is the bare local herdr target; REPORT_NAME is <machine-slug>/<chunk-id>.
+# Run each herdr command on the pane's server; from elsewhere use ssh <host> 'herdr ...'.
 # 1. capture (name-addressed) → the git-tracked run archive
 mkdir -p docs/superpowers/fleet-runs
-{ echo "## $NAME"; echo "PR #$PR · $COMMIT · gate: $VERDICT"; echo;
+{ echo "## $REPORT_NAME"; echo "PR #$PR · $COMMIT · gate: $VERDICT"; echo;
   herdr agent read "$NAME" --source recent --lines 400 \
     | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])'; echo;
 } >> "docs/superpowers/fleet-runs/$EPIC.md"
-git add "docs/superpowers/fleet-runs/$EPIC.md" && git commit -m "chore(fleet): archive $NAME result"
+git add "docs/superpowers/fleet-runs/$EPIC.md" && git commit -m "chore(fleet): archive $REPORT_NAME result"
 # 2. THEN teardown
 PID=$(herdr agent get "$NAME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["pane_id"])')
 herdr pane close "$PID"; git worktree remove .claude/worktrees/$NAME --force; git branch -D feat/$NAME
 ```
-Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) or `herdr session attach $NAME` (live, while it persists).
-```
+Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) or local
+`herdr session attach $NAME`; for a remote interactive re-entry use
+`herdr --remote <host> --session <session>` (UI attach only, never a driving-command prefix).
 
 ## Kanban (GitHub Project v2 via gh; needs `project` scope)
 ```sh
 gh project create --owner <user> --title "<title>" --format json        # → number + id (PVT_…)
 gh project field-list <num> --owner <user> --format json                # → Status field id + option ids
 # add a card (draft) + set Status:
-IID=$(gh project item-create <num> --owner <user> --title "<chunk>" --body "<wave·engine·branch·pane·PR>" --format json | jq -r .id)
+IID=$(gh project item-create <num> --owner <user> --title "<report-name>" --body "<wave·engine·branch·pane=<report-name>·PR>" --format json | jq -r .id)
 gh project item-edit --id "$IID" --project-id <PVT_id> --field-id <STATUS_field_id> --single-select-option-id <option_id>
 ```
 Move a card: re-run `item-edit` with the target Status option id (Todo→In Progress→Done). Dogfood findings
@@ -301,9 +330,9 @@ Move a card: re-run `item-edit` with the target Status option id (Todo→In Prog
 ## Dogfood (tracer-bullet) brief
 > Dogfood ONE merged chunk on latest main. Build + run the app (start its datastore, daemon, web). Exercise
 > <the chunk's new behavior> end-to-end + a core-flow smoke; capture repro evidence (screenshots/steps). Use
-> the dogfood skill. Report a structured findings list (what worked, what broke, repro). Do NOT fix - the
-> orchestrator triages findings into kanban cards. If the local stack will not come up cleanly, that IS the
-> top finding - report it.
+> the dogfood skill. Report as <report-name> with a structured findings list (what worked, what broke,
+> repro). Do NOT fix - the orchestrator triages findings into kanban cards. If the local stack will not
+> come up cleanly, that IS the top finding - report it.
 
 Spawn dogfood panes on **sonnet** (`claude --model sonnet --dangerously-skip-permissions`); opus for
 reactor-subtle merges; never fable (scoping/planning/review only).
@@ -319,10 +348,11 @@ Run-map issue: <url>
 - Ledger: <path> - last line: "<verbatim>"
 - Kanban: <url> - Todo:N InProgress:N Done:N
 - Fleetboard claims held: <list|none>
-- Fleet-tab panes: <name (pane_id): status> each
+- Fleet-tab panes: <machine-slug>/<chunk-id> (<pane_id>): <status> each
 - Signals file: <path> - unreconciled DONE|BLOCKED|ERROR lines
 ## In-flight per chunk (unmerged only)
-- <chunk>: worktree, branch, pane <name (id)>, stage, waiter/monitor armed y/n
+- <machine-slug>/<chunk-id>: worktree, branch, pane <machine-slug>/<chunk-id> (<pane_id>), stage,
+  waiter/monitor armed y/n
 ## Active steering overrides (must survive rotation)
 ## Open bell items / unresolved human asks
 ## Known blockers (ONLY freeform section)
@@ -332,7 +362,8 @@ Run-map issue: <url>
 Full rationale + sources: `docs/research/orchestrator-context-reduction.md` (apps repo).
 
 ## Sweep checklist (each wake)
-1. `herdr agent list` + `git worktree list` - map state.
+1. `herdr agent list` locally plus `ssh <host> 'herdr agent list'` per remote machine, and
+   `git worktree list` on each target - map state.
 2. For the woken pane: read → finished? gate (`/review-all` + judgment) → merge → move card → dogfood.
    Blocked? read the blocker, unblock.
 3. Re-arm waiters for still-working panes; spawn next-wave independent chunks (engine-routed).

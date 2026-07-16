@@ -115,16 +115,21 @@ it into this table as the new default.
 The user reads the sidebar to know *what needs me* vs *what's fine* — an unnamed pane, a duplicate
 workspace label, or a stale label is a housekeeping DEFECT (live audit 2026-07-16: 6 of 8 agents unnamed,
 two workspaces both labeled "apps" — illegible). Two independent surfaces, verified live:
-**agent NAME = addressing** (waiters/commands target it — set once to the chunk id, NEVER rename mid-run)
+**agent NAME = server-local addressing** (waiters/commands target it — set once to the bare chunk id,
+NEVER rename mid-run)
 and **pane LABEL = display** (`herdr pane rename <pane_id> "<glyph> <chunk-id>"` — safe to change freely;
-name-addressing survives it).
-- **On spawn** every fleet pane gets BOTH: agent name = chunk-id AND pane label `▶ <chunk-id>`.
+name-addressing survives it). The slug minted by `fleetctl join --name <slug>` is the machine id: keep
+local herdr names/labels bare, but write `<slug>/<chunk-id>` on every surface that leaves that machine.
+- **On spawn** every fleet pane gets BOTH: local agent name = `<chunk-id>` AND local pane label
+  `▶ <chunk-id>`. The enclosing tab identifies a non-primary machine: `fleet:<epic>@<slug>`; keep
+  `fleet:<epic>` on the primary machine.
 - **Status glyphs (fixed vocabulary, update the label at every transition):**
   `▶` building · `⏳` built, queued for gate · `🔎` under review/gate · `✋` needs a HUMAN decision
   (always paired with `fleetctl attn`) · `❌` errored/stuck (monitor caught). No ✅ glyph — a finished pane
   is archived-then-closed, so "done" lives on the kanban + run archive, never as sidebar clutter.
 - **Tab label carries live counts** for at-a-glance triage: `herdr tab rename <fleet-tab>
-  "fleet:<epic> ▶3 ⏳1 ✋1"` — refresh on each wake.
+  "fleet:<epic> ▶3 ⏳1 ✋1"` on primary or `"fleet:<epic>@<slug> ▶3 ⏳1 ✋1"` elsewhere — refresh on
+  each wake.
 - **The invariant the user relies on:** everything visible is working or queued; `✋`/`❌` means "needs me"
   (mirrored on the fleetboard attention list); everything else is fine by construction.
 - **Sweep duty (every wake):** reconcile every fleet pane's label against its true state, refresh tab
@@ -161,10 +166,11 @@ orchestrator reads on every wake, independent of any live waiter:
 - **At fleet start** set the signals file: `SIGNALS=/tmp/fleet-<epic>.signals` (one per run; note the path
   in the ledger; survives waiter death, not pane death — it's a file).
 - **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR errored —
-  append one line `date-time <chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS, and put the detail
-  (what's wrong, what you need) in REPORT.md at the worktree root. A pane that can still run a shell can
-  always signal, even when its engine can't finish the chunk.
-- **Every orchestrator wake reads $SIGNALS first** and reconciles BEFORE trusting waiters: signaled DONE →
+  append one line `date-time <machine-slug>/<chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS,
+  and put the detail (what's wrong, what you need) in REPORT.md at the worktree root. A pane that can still
+  run a shell can always signal, even when its engine can't finish the chunk.
+- **Every orchestrator wake reads each machine's $SIGNALS first** (remote files via
+  `ssh <host> 'cat <signals-path>'`) and reconciles BEFORE trusting waiters: signaled DONE →
   gate it (even if the waiter never fired); BLOCKED/ERROR → read REPORT.md, unblock or re-spawn; any
   signaled pane still open after its chunk closed = archive+close now.
 - **Orphan sweep (every wake):** cross-check fleet-tab panes (`herdr agent list`) against the ledger/kanban —
@@ -182,8 +188,9 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
   a one-line gist; detail stays in the PR/archive — the map never restates it), **Not yet specified** (the
   fog), **Out of scope** (ruled out + why, so it never resurfaces). Update it in the same wake that merges
   + archives a chunk.
-- **Refer by NAME everywhere** (extends the pane rule to chunks/cards/issues): names wrap links; a wall of
-  bare `#42 #43` is illegible to the human.
+- **Refer by machine-qualified NAME everywhere** (extends the pane rule to chunks/cards/issues):
+  `<machine-slug>/<chunk-id>` wraps links in the run map, cards, lifecycle entries, and human-facing
+  reports; a bare chunk name or wall of bare `#42 #43` is ambiguous and illegible.
 - **Frontier discipline:** express chunk dependencies as native GitHub blocked-by relations where available
   (falls back to a checklist on the map) so the tracker renders ready-vs-blocked visually. The frontier =
   open + unblocked + unclaimed chunks — the ONLY things a wave may spawn. **Claim-first:** assign the chunk
@@ -209,17 +216,27 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
    `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
-3. **Spawn, engine-routed + NAMED, into the FLEET TAB:** `herdr agent start <chunk-id> --cwd <worktree> --tab <fleet-tab-id> -- <engine argv>`
-   — the agent NAME is the kanban chunk id; set the initial pane label too (`herdr pane rename <pane_id> "\u25b6 <chunk-id>"` - see Sidebar legibility). Placement hierarchy (once per fleet run, not per chunk):
+3. **Spawn, engine-routed + NAMED, into the FLEET TAB.** At placement, bind the machine slug registered by
+   `fleetctl join --name <slug>` and keep both identities: local herdr name `<chunk-id>`; external/reporting
+   name `<slug>/<chunk-id>`. Spawn locally with `herdr agent start <chunk-id> --cwd <worktree> --tab
+   <fleet-tab-id> -- <engine argv>`. For a non-primary machine, execute the whole command there:
+   `ssh <host> 'herdr agent start <chunk-id> --cwd <worktree> --tab <fleet-tab-id> -- <engine argv>'`.
+   The remote agent NAME is still the bare chunk id; set its local pane label too (`ssh <host> 'herdr pane
+   rename <pane_id> "▶ <chunk-id>"'` - see Sidebar legibility). Every later remote read/send/wait/rename/
+   close follows the same host-explicit SSH form. Never use `herdr --remote` for driving; it is UI-attach only.
+   Placement hierarchy (once per fleet run, not per chunk):
    **workspace = the project/space** (existing, human-labeled) → **tab 1 = the human's interactive sessions
-   (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label "fleet:<epic>"
-   --no-focus` (e.g. `fleet:define-view`), keep its `tab_id`, and spawn EVERY chunk pane with `--tab <tab_id>`.
-   The human's sidebar then reads: space → `fleet:<epic>` tab → named chunk panes. `herdr tab rename` retrofits.
-   **Tab hygiene (live lesson - user caught both):** (a) `herdr tab list --workspace <ws>` BEFORE creating -
-   reuse an existing `fleet:<epic>` tab instead of minting a duplicate; (b) `tab create` ships an empty root
-   SHELL pane (`result.root_pane` in the create response) - after the first chunk pane spawns into the tab,
-   `herdr pane close <root_pane_id>`, and sweep with `herdr pane list --workspace <ws>` (no stray `shell`
-   panes in fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
+   (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label
+   "fleet:<epic>" --no-focus` on primary; `ssh <host> 'herdr tab create --workspace <ws-id> --label
+   "fleet:<epic>@<slug>" --no-focus'` on a non-primary machine. Keep its `tab_id`, and spawn EVERY chunk
+   pane with `--tab <tab_id>`. The human's sidebar then reads: space → machine-identifying fleet tab →
+   bare named chunk panes. `herdr tab rename` retrofits.
+   **Tab hygiene (live lesson - user caught both):** (a) run `herdr tab list --workspace <ws>` on the target
+   server (through SSH when remote) BEFORE creating; reuse the expected `fleet:<epic>` or
+   `fleet:<epic>@<slug>` tab instead of minting a duplicate; (b) `tab create` ships an empty root SHELL pane
+   (`result.root_pane` in the create response) - after the first chunk pane spawns into the tab, close that
+   root pane and sweep `herdr pane list --workspace <ws>` on the same target (no stray `shell` panes in
+   fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
    Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
    **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
    mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
@@ -231,8 +248,9 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    seam rule (point at `testing-anti-patterns.md`; a behavior-bearing chunk asserts the *observable effect
    at the real seam*, e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears — NOT that a
    mocked dispatch was called) → gates (`superpowers:verification-before-completion`: `bun run typecheck` 0,
-   `verify:effect` 0, suites green) → **`git add -A && git commit` before STOP, then report; do NOT
-   push/PR/merge** (uncommitted worktree = UNFINISHED to the waiter). Claude panes get the skill NAMES (they
+   `verify:effect` 0, suites green) → **`git add -A && git commit` before STOP, then report as
+   `<slug>/<chunk-id>`; do NOT push/PR/merge** (uncommitted worktree = UNFINISHED to the waiter). Claude
+   panes get the skill NAMES (they
    have the Skill tool); codex/pi panes get the non-Claude variant with the discipline spelled out as text.
    **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
    told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
@@ -285,7 +303,8 @@ genuinely-`working` pane).
    snapshot `{status, output-tail hash, commits-beyond-main, dirty}` and diff vs the last snapshot in a state
    file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
 2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script) → ring immediately
-   (`fleetctl attn <fleet-id> "<pane> errored: <line>"` + PushNotification on the user's Mac); don't wait out K sweeps.
+   (`fleetctl attn <fleet-id> "<machine-slug>/<chunk-id> errored: <line>"` + PushNotification on the
+   user's Mac); don't wait out K sweeps.
 3. **STUCK** - status + output-hash + commit-count ALL unchanged for K sweeps (~6-10 min) while status ∉
    `{idle,done}` → ring. Read the tail to classify: real long compile/suite (re-arm, leave it) vs frozen
    (recover). A pane legitimately on a background shell shows *changing* output/logs - a frozen one is inert.
@@ -302,9 +321,11 @@ A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcrip
 
 Per chunk, right after merge (step 7), BEFORE closing:
 1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
-2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
-3. **THEN teardown:** `herdr pane close <pane_id>` (resolve id from the name) → `git worktree remove` → `git branch -D`. Last chunk of the run: `herdr tab rename <fleet-tab> "fleet:<epic> ✓done"` (or close it).
-4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority), or `herdr session attach <name>` for a live re-entry WHILE the session still persists.
+2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <machine-slug>/<chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
+3. **THEN teardown:** `herdr pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) → `git worktree remove` → `git branch -D`. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
+4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority), use
+   `herdr session attach <name>` for a local live re-entry, or `herdr --remote <host> --session <session>`
+   for remote UI attach WHILE the session still persists; never use `--remote` to drive subcommands.
 **Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
 Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
 **Close at COMMIT+REPORT, not at merge (2026-07-13, user rule — 11 idle panes piled up waiting out a long review queue).**
@@ -365,17 +386,26 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
   (1) `agent read` to capture the draft text + log it, (2) `agent send <the same text>` (the replace
   makes it submittable), (3) `send-keys Enter`, (4) confirm status = `working`. Only then send your own
   steering as the next message.
-- **Name everything; report by name.** `agent start <chunk-id>` — the name IS the chunk id, unique per fleet
-  (never generic like `codex`: detected labels are also targets → ambiguous). ALL `herdr agent *` commands
-  (get/read/send/wait/rename/focus/attach) accept the NAME as target; address by name everywhere. Pane id is
-  required ONLY for `herdr pane *` (send-keys/run/close) and `herdr wait output|agent-status` — resolve once:
-  `herdr agent get <name> | jq -r .result.agent.pane_id`. REPORTING rule: to the human always say
-  `<name> (<pane_id>)` — e.g. `dv-record-detail (wV:pC)` — never a bare pane id.
+- **Name everything locally; qualify everything externally.** `agent start <chunk-id>` — the herdr NAME is
+  the bare chunk id, unique only inside that server's own agent table (never generic like `codex`: detected
+  labels are also targets → ambiguous locally). ALL `herdr agent *` commands (get/read/send/wait/rename/
+  focus/attach) accept that bare local NAME. Pane id is required ONLY for `herdr pane *`
+  (send-keys/run/close) and `herdr wait output|agent-status` — resolve on that server:
+  `herdr agent get <chunk-id> | jq -r .result.agent.pane_id`. Every reference that leaves the machine —
+  ledger, kanban card, run map, lifecycle/signal/monitor event, `fleetctl attn` line, run archive, rotation
+  handoff, and report to the human — MUST use `<machine-slug>/<chunk-id>`. Human reports say
+  `<machine-slug>/<chunk-id> (<pane_id>)`, never a bare name or pane id.
+- **There is no cross-host herdr namespace.** Two servers may both have a bare agent named `sdk-migrate`;
+  herdr detects no collision, so recording or driving bare `sdk-migrate` across machines can silently
+  attribute work to the wrong pane. Prevention is the pair above: qualify every off-machine reference, and
+  drive another server only as `ssh <host> 'herdr <subcommand> ...'`, with the host explicit at each call
+  site. Never point a local client at a remote socket or write `herdr --remote <host> agent ...`;
+  `--remote` only opens the interactive UI attach and is not composable with driving subcommands.
 - **Three-level placement: workspace=space · tab=fleet run · pane=chunk.** The workspace is the human's
   project space — do NOT create one per chunk. Tab 1 of a workspace belongs to the human's interactive
-  sessions — NEVER spawn fleet panes there or into whatever tab has focus. Create ONE `fleet:<epic>` tab per
-  run (`herdr tab create --workspace <ws> --label "fleet:<epic>" --no-focus`) and spawn all chunk panes into
-  it (`agent start ... --tab <tab_id>`); close or rename the tab (`fleet:<epic> ✓done`) when the run ends.
+  sessions — NEVER spawn fleet panes there or into whatever tab has focus. Create ONE `fleet:<epic>` tab on
+  primary or `fleet:<epic>@<slug>` on each non-primary machine and spawn that server's bare-named chunk
+  panes into it (`agent start ... --tab <tab_id>`); close or rename the machine-local tab when the run ends.
   **Retrofit/moves (dogfooded on a LIVE working codex pane — survives untouched):** `herdr pane move <pane_id>
   --tab <tab_id>` (existing tab) / `--new-tab --workspace <ws> --label TEXT` / `--new-workspace --label TEXT
   --tab-label TEXT` (creates workspace+tab+moves in one command; use `--no-focus`). CRITICAL: the pane_id
