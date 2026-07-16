@@ -210,7 +210,7 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
 3. **Spawn, engine-routed + NAMED, into the FLEET TAB:** `herdr agent start <chunk-id> --cwd <worktree> --tab <fleet-tab-id> -- <engine argv>`
-   — the agent NAME is the kanban chunk id; set the initial pane label too (`herdr pane rename <pane_id> "\u25b6 <chunk-id>"` - see Sidebar legibility). Placement hierarchy (once per fleet run, not per chunk):
+   — the agent NAME is the kanban chunk id; append the RES ledger line for the new pane (and any tab you just created) in this same wake (see Housekeeping: Resource ledger); set the initial pane label too (`herdr pane rename <pane_id> "\u25b6 <chunk-id>"` - see Sidebar legibility). Placement hierarchy (once per fleet run, not per chunk):
    **workspace = the project/space** (existing, human-labeled) → **tab 1 = the human's interactive sessions
    (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label "fleet:<epic>"
    --no-focus` (e.g. `fleet:define-view`), keep its `tab_id`, and spawn EVERY chunk pane with `--tab <tab_id>`.
@@ -316,6 +316,24 @@ minutes away) may stay for ONE gate cycle — a send-back to a closed pane costs
 the findings as the brief, which is acceptable and often cleaner (fresh context) than keeping N idle panes alive.
 Idle panes with no live job are a defect: every fleet-tab pane must be `working` or awaiting an imminent send-back.
 
+### Resource ledger + deterministic teardown (2026-07-16 — structure over sweep-rules)
+Empty tabs/panes kept surviving runs DESPITE sweep duty + archive-then-close: those rules live in
+orchestrator context and decay under compaction/rotation. Cleanup is therefore LEDGER-driven, never
+memory-driven — the same law that already governs worktrees ("housekeep only what THIS run created,
+tracked by exact path") extended to every herdr resource:
+- **Mint = record.** Every command that mints a herdr resource — `tab create`, `agent start`,
+  `pane split`, workspace create — appends one ledger line IN THE SAME wake, never batched:
+  `RES <tab|pane|agent|workspace> <id> <name/label>`. The empty root SHELL pane a `tab create` ships
+  (`result.root_pane`) gets its own RES line until closed. No RES line = not yours = you may not close it.
+- **Teardown reads the ledger, never the sidebar.** At run end (and before any rotation handoff):
+  list still-open RES lines → archive-then-close each pane by exact id → close tabs last → VERIFY
+  (`herdr pane list --workspace <ws>` + `tab list`: zero fleet-minted resources remain) → append
+  `TEARDOWN-DONE <n closed>` to the ledger. `fleetctl deregister` only AFTER teardown-verify.
+- **Exact ids only** — never pattern-match labels (`fleet:*`) to find things to close; concurrent
+  fleets share the namespace (same live lesson as the worktree cleanup regex).
+- **Rotation-safe:** the handoff doc carries the open RES lines; the successor inherits the teardown
+  obligation with the resources and re-verifies them like every other snapshot field.
+
 ## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
 Your state lives in the **ledger + kanban + git**, NOT your context. So you survive compaction and a fresh
 orchestrator can resume from those alone.
@@ -417,7 +435,7 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
   own dispatch; (c) such chunks carry a real-seam acceptance assertion (mock only non-deterministic leaves).
   UAT/dogfood is the backstop, not the primary catch.
 - **Never close a pane before archiving its result.** `close` is where the transcript dies (no herdr export; session-attach not guaranteed post-close). Capture `agent read --source recent` → the git-tracked run archive (`docs/superpowers/fleet-runs/<epic>.md`) FIRST, then close. The archive — not the live pane — is the restorable record.
-- **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
+- **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Same law for herdr panes/tabs — close from the ledger's RES lines (see Housekeeping: Resource ledger), never by label pattern. Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Never brief `git add -A` while worktree-root scratch exists (live lesson - BRIEF.md/REPORT.md shipped to main twice).** Pane briefs and reports live at the worktree root; `add -A` commits them, the squash-merge lands them on main, and every later worktree "inherits" a stale brief. Fix: gitignore the scratch names (`/BRIEF.md`, `/REPORT.md`) in the repo once, AND write briefs with explicit `git add <paths>` or `git add -A ':!BRIEF.md' ':!REPORT.md'`. Gate check: the review diff must not contain the brief/report files.
 - **Long briefs travel as files, not keystrokes (2026-07-10 API-drop lessons).** Spawning/briefing with a
