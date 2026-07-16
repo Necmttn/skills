@@ -111,6 +111,62 @@ this skill; record which lane file version a run used in the ledger. Resolution 
 override into the run ledger (so a resumed orchestrator keeps honoring it), and ask once whether to persist
 it into this table as the new default.
 
+## Sidebar legibility — the herdr sidebar IS the human's status board
+The user reads the sidebar to know *what needs me* vs *what's fine* — an unnamed pane, a duplicate
+workspace label, or a stale label is a housekeeping DEFECT (live audit 2026-07-16: 6 of 8 agents unnamed,
+two workspaces both labeled "apps" — illegible). Two independent surfaces, verified live:
+**agent NAME = addressing** (waiters/commands target it — set once to the chunk id, NEVER rename mid-run)
+and **pane LABEL = display** (`herdr pane rename <pane_id> "<glyph> <chunk-id>"` — safe to change freely;
+name-addressing survives it).
+- **On spawn** every fleet pane gets BOTH: agent name = chunk-id AND pane label `▶ <chunk-id>`.
+- **Status glyphs (fixed vocabulary, update the label at every transition):**
+  `▶` building · `⏳` built, queued for gate · `🔎` under review/gate · `✋` needs a HUMAN decision
+  (always paired with `fleetctl attn`) · `❌` errored/stuck (monitor caught). No ✅ glyph — a finished pane
+  is archived-then-closed, so "done" lives on the kanban + run archive, never as sidebar clutter.
+- **Tab label carries live counts** for at-a-glance triage: `herdr tab rename <fleet-tab>
+  "fleet:<epic> ▶3 ⏳1 ✋1"` — refresh on each wake.
+- **The invariant the user relies on:** everything visible is working or queued; `✋`/`❌` means "needs me"
+  (mirrored on the fleetboard attention list); everything else is fine by construction.
+- **Sweep duty (every wake):** reconcile every fleet pane's label against its true state, refresh tab
+  counts, and archive+close any pane whose job ended. Unnamed/mislabeled panes in a fleet tab: fix on sight.
+
+## Tandem orchestrator — codex co-pilot watching the fable orchestrator
+For autonomous/overnight runs (default on; skip for short attended runs), spawn ONE codex pane at max
+reasoning alongside the orchestrator as a second pair of frontier eyes:
+`herdr agent start tandem:<epic> --tab <orchestrator-tab> -- codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort="max"`
+(pane label `tandem:<epic>`; brief template in REFERENCE.md).
+- **Watchdog over the orchestrator itself** (~10 min cadence): read the orchestrator pane tail + ledger +
+  `herdr agent list`; catch starvation (no wake progress), context bloat past the rotation threshold,
+  parked-draft blocking, dead waiters/monitor. Follows the hard rules: commits-alive check before flagging
+  stuck; parked-draft submit protocol; 2 same-cause blocked cycles = incident, ring the bell.
+- **Judgment assist:** the orchestrator sends `TANDEM-JUDGE: <question> + pointers (plan section, diff
+  paths, both reviews)` for gate tiebreaks, risky merges, ambiguous designs; tandem returns a terse verdict
+  + reasoning. ADVISORY ONLY — the orchestrator still owns review+gate+merge (never delegated).
+- **Boundaries:** tandem is read-only on the repo — it never edits, merges, spawns, or kills panes; its only
+  outputs are `agent send` to the orchestrator and the bell. It is a fleet-spawned pane: archive-then-close
+  at run end like every other.
+
+## Child→parent signals — panes PUSH on stop; waiters/monitor only poll (orphan prevention)
+Polling alone (waiter + monitor) babysits panes but gives a child NO way to tell the parent "done" or
+"stuck" — if the waiter dies (harness reap, orchestrator compaction/rotation) the pane finishes silently
+and becomes an ORPHAN (live complaint 2026-07-16). So every pane also PUSHES a durable signal the
+orchestrator reads on every wake, independent of any live waiter:
+- **At fleet start** set the signals file: `SIGNALS=/tmp/fleet-<epic>.signals` (one per run; note the path
+  in the ledger; survives waiter death, not pane death — it's a file).
+- **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR errored —
+  append one line `date-time <chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS, and put the detail
+  (what's wrong, what you need) in REPORT.md at the worktree root. A pane that can still run a shell can
+  always signal, even when its engine can't finish the chunk.
+- **Every orchestrator wake reads $SIGNALS first** and reconciles BEFORE trusting waiters: signaled DONE →
+  gate it (even if the waiter never fired); BLOCKED/ERROR → read REPORT.md, unblock or re-spawn; any
+  signaled pane still open after its chunk closed = archive+close now.
+- **Orphan sweep (every wake):** cross-check fleet-tab panes (`herdr agent list`) against the ledger/kanban —
+  a pane whose chunk is already merged/abandoned, or that appears in $SIGNALS but has no live waiter, is an
+  orphan: archive-then-close it and re-arm whatever should have caught it.
+- Signals COMPLEMENT the two spines: waiter = fast wake on done; monitor = liveness; signals = the durable
+  truth that survives both dying. A chunk may only be considered lost if all three are silent AND the
+  worktree shows no commits.
+
 ## Setup (once)
 1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
    (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
@@ -127,7 +183,7 @@ it into this table as the new default.
    `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
 3. **Spawn, engine-routed + NAMED, into the FLEET TAB:** `herdr agent start <chunk-id> --cwd <worktree> --tab <fleet-tab-id> -- <engine argv>`
-   — the agent NAME is the kanban chunk id. Placement hierarchy (once per fleet run, not per chunk):
+   — the agent NAME is the kanban chunk id; set the initial pane label too (`herdr pane rename <pane_id> "\u25b6 <chunk-id>"` - see Sidebar legibility). Placement hierarchy (once per fleet run, not per chunk):
    **workspace = the project/space** (existing, human-labeled) → **tab 1 = the human's interactive sessions
    (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label "fleet:<epic>"
    --no-focus` (e.g. `fleet:define-view`), keep its `tab_id`, and spawn EVERY chunk pane with `--tab <tab_id>`.

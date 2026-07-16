@@ -84,6 +84,15 @@
       "origin": "user 2026-07-16: agent launches were inheriting the expensive default model on non-judgment work"
     },
     {
+      "id": "tandem",
+      "match": "co-orchestrator: watchdog over the fable orchestrator + advisory judgment (TANDEM-JUDGE) - autonomous/overnight runs, default on; skip short attended runs",
+      "engine": "codex",
+      "argv": "codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort=\"max\"",
+      "enabled": true,
+      "reason": "second frontier perspective at max reasoning; read-only + advisory, orchestrator keeps gate/merge",
+      "origin": "user 2026-07-16: restore fable+codex tandem orchestration from earlier runs"
+    },
+    {
       "id": "gate",
       "match": "review + gate + merge",
       "engine": "orchestrator",

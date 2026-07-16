@@ -64,7 +64,10 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run git add -A && git commit
 > (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA +
 > test summary + concerns. Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the
-> orchestrator owns review + merge.
+> orchestrator owns review + merge. SIGNAL STEP (mandatory, LAST, even on failure): append one line
+> `date -Iseconds` + " <chunk-id> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on
+> BLOCKED/ERROR write the detail + what you need into REPORT.md at the worktree root - stopping without
+> signaling means the orchestrator may never see your result.
 
 ### Discipline block - non-Claude panes (codex/pi; no Skill tool - same discipline spelled out)
 > WORKFLOW (mandatory): FIRST write a short plan before touching code (decompose into tasks, name files+tests,
@@ -77,7 +80,11 @@ unstructured. Rich context does not substitute for the block; the block is what 
 > run gates from the worktree. GATES before done: <repo gates, real exit codes - never pipe tsc through
 > tail/grep before checking $?>. Then run git add -A && git commit (one conventional commit;
 > an uncommitted worktree is treated as UNFINISHED), STOP and report commit SHA + test summary + concerns.
-> Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge.
+> Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge. SIGNAL
+> STEP (mandatory, LAST, even on failure): append one line `date -Iseconds` + " <chunk-id>
+> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on BLOCKED/ERROR write the detail + what you
+> need into REPORT.md at the worktree root - stopping without signaling means the orchestrator may never
+> see your result.
 
 ## Build-pane brief template (one line - no newlines/apostrophes; send + `send-keys Enter`)
 Example of CONTEXT + block fused for a standard build chunk; for other shapes (bug fix, refactor) write your
@@ -234,6 +241,19 @@ gh project item-edit --id "$IID" --project-id <PVT_id> --field-id <STATUS_field_
 ```
 Move a card: re-run `item-edit` with the target Status option id (Todo→In Progress→Done). Dogfood findings
 = new Todo cards linked (in body) to the chunk.
+
+## Tandem orchestrator brief (codex, max reasoning - spawn into the orchestrator tab)
+> You are the TANDEM co-orchestrator for fleet <epic>. The orchestrator is agent <orchestrator-name>
+> (fable). Your job, on a ~10 min loop: (1) WATCHDOG - read the orchestrator pane tail
+> (herdr agent read <orchestrator-name> --lines 40), the run ledger at <ledger-path>, and herdr agent list;
+> flag starvation (no wake progress AND no new commits on fleet branches - always check commits before
+> flagging), context bloat past the rotation threshold, parked drafts blocking steering (log the draft,
+> then follow the submit protocol), dead waiters/monitor. On a finding: send ONE terse message to the
+> orchestrator (herdr agent send <orchestrator-name> "TANDEM: <finding + suggested action>" then a separate
+> Enter); if the same cause blocks 2 consecutive cycles, ring the bell (fleetctl attn <fleet-id> "...").
+> (2) JUDGE - when you receive a message starting TANDEM-JUDGE:, read ONLY the pointers given (plan
+> section, diff paths, review verdicts) and reply with a terse verdict + 3-line reasoning. You are ADVISORY:
+> never edit files, merge, spawn, or kill anything. Read-only on the repo.
 
 ## Dogfood (tracer-bullet) brief
 > Dogfood ONE merged chunk on latest main. Build + run the app (start its datastore, daemon, web). Exercise
