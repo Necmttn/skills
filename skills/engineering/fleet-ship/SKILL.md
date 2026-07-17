@@ -19,11 +19,17 @@ Live lessons that forced this: a fleet rebased main under another fleet's staged
 landed vitest-breaking test files; a port cleanup killed a sibling fleet's dev servers and a native
 build mid-compile.
 1. **Register on run start** (epic, status), **deregister on run end**, heartbeat between.
-2. **Claims are exclusive**: `main-merge` (only the holder merges/rebases main - others queue their
-   gated branches and note them in the registry), `sim:<udid>` (boot a SEPARATE simulator per fleet -
-   `xcrun simctl list devices available` then `boot`; never install/launch on a claimed sim),
-   `ports:<app>` (better: run dev stacks from YOUR worktree so `scripts/worktree-ports.sh` +
-   portless auto-offset - then no port claim is needed), `neon:<project>` (dev-DB migrations).
+2. **Claims are exclusive, TTL'd + FIFO** (Fleetboard v2 Durable Object alarm; #15 owns the mechanics -
+   this documents the protocol you follow, not the DO internals). A taken claim returns exit 1 + the
+   holder + your FIFO queue position; the queue position is HONORED - your turn comes in order, never
+   jump it or poll-race it. A claim whose TTL expires **auto-releases** - an expired holder has LOST the
+   claim (mid-merge expiry: see Merge under claim). **Claim discipline is REQUIRED, not nice-to-have:**
+   several gating machines merge this repo concurrently and the claim is the ONLY serialization.
+   Resources: `main-merge` (only the holder merges/rebases main - the full flow is Merge under claim
+   below; others hold their gated branches and wait their queue turn), `sim:<udid>` (boot a SEPARATE
+   simulator per fleet - `xcrun simctl list devices available` then `boot`; never install/launch on a
+   claimed sim), `ports:<app>` (better: run dev stacks from YOUR worktree so `scripts/worktree-ports.sh`
+   + portless auto-offset - then no port claim is needed), `neon:<project>` (dev-DB migrations).
 3. **Before killing anything shared** (kill-port-listeners, `just * kill`, pkill, sim uninstall):
    check the registry; if another fleet holds the claim, work around it or queue.
 4. **Shared merge gate**: `bun run test:vitest` from the repo root must be green before ANY merge to
@@ -35,6 +41,36 @@ build mid-compile.
    user's typed answer on your item after ringing.
 6. **Name your orchestrator pane/tab** (`herdr tab create --label "orchestrator:<epic>"`) so
    `herdr agent list` yields a truthful census.
+
+### Merge under claim - the ONLY way anything lands on main
+Merge-worthiness = the FULL fleet-ship workflow passed WHEREVER the chunk ran (plan → cheap-lane build →
+multi-agent review → feedback traced → final smart-model review - i.e. per-chunk-loop step 6's cross-model
+consensus gate, UNCHANGED and referenced here, not redefined). Run that gate on YOUR OWN machine BEFORE
+claiming - a claim held while you still review starves the queue. Passing the chain on ANY machine is
+sufficient - NO central re-review. Central merge queue REJECTED (#6, verbatim): it "re-runs suites already
+run, idles branches on one machine's availability, recreates the single-machine dependency" - that is why
+the passing-workflow-on-any-machine model is used instead. The flow (ordered; no step skippable):
+1. **Claim** `main-merge` - or take your FIFO queue position and wait your turn (do other work; never
+   poll-race or jump the queue).
+2. **Rebase** the gated branch on latest main (only the holder may touch main).
+3. **Repo-root gate LOCALLY:** the repo's FULL root gate (`bun run test:vitest`-equivalent from the repo
+   root, whatever the fleet's own runner - the Shared merge gate rule above) runs green on the MERGING
+   machine, before the merge.
+4. **Re-assert the claim, then squash-merge** to main. Step 3's local root gate can outrun the TTL, so at
+   this irreversible instant re-verify the claim is STILL yours; merge + push ONLY under a live claim - if it
+   expired, do NOT merge, drop to abort + re-queue below. (#15's DO fences the push so an expired holder's
+   merge is rejected - naming the re-check point here; the enforcement is #15's.)
+5. **Emit `MERGED`** (`fleetctl event MERGED --machine <slug> --chunk <chunk-id> …` - the lifecycle
+   event; see Child→parent lifecycle events).
+6. **Release** the claim.
+**TTL expiry mid-merge: abort + re-queue, NEVER half-merge.** The expired claim auto-releases and the next
+holder may touch main - so on expiry (or on noticing you have outlived the TTL): abort the in-flight
+rebase/merge (`git rebase --abort` / `git merge --abort`; main stays untouched, your gated branch is
+durable), re-enter the FIFO queue, and on reacquire restart from step 2 - main has moved. Steps 2-5 happen
+ONLY while you verifiably hold the claim.
+Forward pointers, out of scope here: hold-tagged chunks stop at GATED for the human (#33); chunk→machine
+placement stays on the Mac (#35); claim DO/alarm internals are Fleetboard v2 (#15). This protocol is
+E2E-verified by the tracer bullet (skills#13), not a unit suite.
 
 ## Skills this composes (the chain - invoke these, don't reinvent)
 - **Drive panes:** `herdr-agent-orchestration` (read FIRST - `agent list/read/send/wait`, `pane send-keys`, `agent start`).
@@ -308,7 +344,9 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    `superpowers:finishing-a-development-branch`.
    **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
    reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
-   tiebreak, never a coin flip. Consensus pass → emit `GATED`. Then **squash-merge to main** → emit `MERGED`.
+   tiebreak, never a coin flip. Consensus pass → emit `GATED`. Then merge **under the `main-merge` claim** -
+   the ordered Merge-under-claim flow (claim/queue FIFO → rebase on main → LOCAL repo-root gate →
+   squash-merge → emit `MERGED` → release); never merge outside it.
 7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. Append the chunk\u2019s decision line to the run map (see Run map). **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
    **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-4.8 for reactor-subtle merges;
@@ -427,8 +465,9 @@ Idle machines run ONLY the heartbeat daemon - no idle steward stays resident.
 - **Division of labor (spec #6, exact):** the **Mac orchestrator keeps** wave planning, chunk-to-machine
   placement, hold tagging, kanban/run-map upkeep, dogfood triggering, and the human interface. The
   **steward runs the FULL fleet-ship workflow locally** on its own machine: worktrees, pane spawn/brief,
-  idle-waiters + the liveness monitor, the cross-model consensus gate, and the merge (under the
-  `main-merge` claim like any orchestrator).
+  idle-waiters + the liveness monitor, the cross-model consensus gate (on its OWN machine, BEFORE
+  claiming), and the merge (under the `main-merge` claim like any orchestrator - the Merge-under-claim
+  flow, TTL'd + FIFO).
 - **Locality is the point:** waiters, monitor loops, and gates ALWAYS run on the steward's own machine -
   NEVER held open over ssh (a held-open remote loop dies with the connection; that fragility is why
   steward mode exists). ssh from the Mac stays for one-shot reads/spawns only. The monitor's "whole
