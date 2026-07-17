@@ -12,7 +12,7 @@ it just runs it across many parallel herdr panes instead of one session.
 ## Multi-orchestrator coordination (MANDATORY - several fleets run this repo concurrently)
 The registry is **fleetboard** - a live board at `$FLEET_BOARD_URL` (default `http://localhost:7777`,
 server + CLI in `~/Projects/fleetboard`; VPS fleets set FLEET_BOARD_URL to the Mac's tailscale addr).
-Drive it with `bun ~/Projects/fleetboard/fleetctl.ts <register|heartbeat|claim|release|attn|deregister>`
+Drive it with `bun ~/Projects/fleetboard/fleetctl.ts <register|heartbeat|claim|release|attn|event|events|deregister>`
 - claim returns exit 1 + holder when a resource is taken. Heartbeat each orchestrator wake. If the
 board is unreachable, fall back to `docs/superpowers/fleet-runs/ACTIVE.md` in the target repo.
 Live lessons that forced this: a fleet rebased main under another fleet's staged merge; three merges
@@ -158,27 +158,43 @@ reasoning alongside the orchestrator as a second pair of frontier eyes:
   outputs are `agent send` to the orchestrator and the bell. It is a fleet-spawned pane: archive-then-close
   at run end like every other.
 
-## Child→parent signals — panes PUSH on stop; waiters/monitor only poll (orphan prevention)
+## Child→parent lifecycle events — panes PUSH on stop; the signals file is only the offline fallback
 Polling alone (waiter + monitor) babysits panes but gives a child NO way to tell the parent "done" or
 "stuck" — if the waiter dies (harness reap, orchestrator compaction/rotation) the pane finishes silently
-and becomes an ORPHAN (live complaint 2026-07-16). So every pane also PUSHES a durable signal the
-orchestrator reads on every wake, independent of any live waiter:
-- **At fleet start** set the signals file: `SIGNALS=/tmp/fleet-<epic>.signals` (one per run; note the path
-  in the ledger; survives waiter death, not pane death — it's a file).
-- **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR errored —
-  append one line `date-time <machine-slug>/<chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS,
-  and put the detail (what's wrong, what you need) in REPORT.md at the worktree root. A pane that can still
-  run a shell can always signal, even when its engine can't finish the chunk.
-- **Every orchestrator wake reads each machine's $SIGNALS first** (remote files via
-  `ssh <host> 'cat <signals-path>'`) and reconciles BEFORE trusting waiters: signaled DONE →
-  gate it (even if the waiter never fired); BLOCKED/ERROR → read REPORT.md, unblock or re-spawn; any
-  signaled pane still open after its chunk closed = archive+close now.
+and becomes an ORPHAN (live complaint 2026-07-16). So every pane also PUSHES a durable record the
+orchestrator reads on every wake, independent of any live waiter. That record is a **lifecycle event on
+the fleetboard event log** (append-only, machine-attributed via the machine token, survives pane AND
+orchestrator death); the local `/tmp/fleet-<epic>.signals` file is kept ONLY as the offline fallback for
+when the board is unreachable:
+- **Lifecycle vocabulary (spec-fixed 7 stages; the board rejects anything else):**
+  `ASSIGNED → PLANNED → BUILT → IN_REVIEW → GATED → MERGED → DOGFOODED`. Emit with
+  `bun ~/Projects/fleetboard/fleetctl.ts event <STAGE> --machine <slug> --chunk <chunk-id> --epic <epic>
+  --gist "<one-line>"` — auth is the machine token minted by `fleetctl join`; the event's chunk id is
+  machine-namespaced `<slug>/<chunk-id>`; a bad stage exits non-zero listing the valid stages.
+- **At fleet start** record the event cursor in the ledger (last `seq` from `fleetctl events --since 0`,
+  or the cursor the ledger already holds) AND still set the fallback file
+  `SIGNALS=/tmp/fleet-<epic>.signals` (one per run; note both in the ledger).
+- **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR
+  errored — the pane pushes its lifecycle event: DONE (work committed) →
+  `fleetctl event BUILT --machine <slug> --chunk <chunk-id> --gist "<gist>"`; BLOCKED/ERROR have no
+  lifecycle stage → ring `fleetctl attn <fleet-id> "<slug>/<chunk-id> BLOCKED|ERROR: <gist>"` and put the
+  detail (what's wrong, what you need) in REPORT.md at the worktree root. FALLBACK only when the board is
+  unreachable (the fleetctl command exits non-zero): append one line
+  `date-time <machine-slug>/<chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS. A pane that can
+  still run a shell can always signal, even when its engine can't finish the chunk.
+- **Every orchestrator wake reads the EVENT LOG first** — `fleetctl events --since <cursor>` (filter
+  `--machine <slug>` / `--chunk` as needed) — and reconciles BEFORE trusting waiters: BUILT → gate it
+  (even if the waiter never fired); a BLOCKED/ERROR attention item → read REPORT.md, unblock or re-spawn;
+  then advance the cursor in the ledger. THEN read each machine's $SIGNALS (remote via
+  `ssh <host> 'cat <signals-path>'`) as the fallback path — lines from board-unreachable panes — and
+  reconcile them the same way; any evented/signaled pane still open after its chunk closed =
+  archive+close now.
 - **Orphan sweep (every wake):** cross-check fleet-tab panes (`herdr agent list`) against the ledger/kanban —
-  a pane whose chunk is already merged/abandoned, or that appears in $SIGNALS but has no live waiter, is an
-  orphan: archive-then-close it and re-arm whatever should have caught it.
-- Signals COMPLEMENT the two spines: waiter = fast wake on done; monitor = liveness; signals = the durable
-  truth that survives both dying. A chunk may only be considered lost if all three are silent AND the
-  worktree shows no commits.
+  a pane whose chunk is already merged/abandoned, or that appears in the event log (or fallback $SIGNALS)
+  but has no live waiter, is an orphan: archive-then-close it and re-arm whatever should have caught it.
+- Events COMPLEMENT the two spines: waiter = fast wake on done; monitor = liveness; the **event log = the
+  durable truth** that survives both dying ($SIGNALS is only its offline shadow). A chunk may only be
+  considered lost if all of these are silent AND the worktree shows no commits.
 
 ## Run map — wayfinder-inspired: ONE issue the human reads to understand the whole run
 The kanban shows status and the archive holds detail, but neither answers "where is this effort and what
@@ -210,6 +226,10 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    first pane spawns; keep it running the whole fleet.
 
 ## Per-chunk loop
+Each transition below emits its lifecycle stage to the event log (`fleetctl event <STAGE> …` - see
+Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` · commit+report=`BUILT`
+(pane-side, via its SIGNAL STEP) · cross-review-started=`IN_REVIEW` · consensus-pass=`GATED` ·
+squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
 1. **Map FIRST.** `herdr agent list` + `git worktree list`. Never spawn into an occupied worktree or
    duplicate work a user/agent already started. (Live lesson: this bit us.)
 2. **Worktree** (`superpowers:using-git-worktrees`): `git worktree add .claude/worktrees/<chunk> -b feat/<chunk> origin/main`
@@ -242,7 +262,8 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
    **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
    mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
-   only by reading the pane status line).
+   only by reading the pane status line). Pane spawned → emit `ASSIGNED`
+   (`fleetctl event ASSIGNED --machine <slug> --chunk <chunk-id> --epic <epic> --gist "spawned <engine>"`).
 4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`). A brief = **CONTEXT section
    (varies per chunk: spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
    (fixed — copy it VERBATIM from REFERENCE.md, never freehand it)**. The block carries the whole chain:
@@ -269,13 +290,14 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    (`agent send "/skill-name <args>"` → `send-keys Enter`), never buried mid-paragraph, then `agent read`
    and confirm the command/skill banner appears before sending the follow-up context; plugin-namespaced
    skills (`superpowers:*`) additionally require that plugin installed under the pane's user — file-sync
-   alone never provides them.
+   alone never provides them. Plan approved (the pane's written plan lands; AWAITING-DECISION design
+   chunks: when the user's decision arrives) → emit `PLANNED`.
 5. **Arm waiter + monitor.** Run the canonical background waiter from REFERENCE: `herdr agent wait` supplies
    bounded backpressure only, then `herdr agent get` payloads gate on `agent_status` in `idle|done`; never
    treat the wait command's exit code as completion. AND ensure the fleet **liveness monitor** loop is
    running (it sweeps this pane for stuck/errored/dead).
-6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane, then three passes before your judgment:
-   a. **Cross-engine review:** the chunk's diff is reviewed by the OTHER mechanical engine (codex-built chunk → grok review; grok-built → `codex review`). Reviewer gets plan section + diff; hunts correctness bugs + plan deviations. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
+6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane (its commit+report already emitted `BUILT` via the SIGNAL STEP; on READY_UNCOMMITTED you commit the pane's work and emit `BUILT` yourself), then three passes before your judgment:
+   a. **Cross-engine review** (dispatching it = emit `IN_REVIEW`)**:** the chunk's diff is reviewed by the OTHER mechanical engine (codex-built chunk → grok review; grok-built → `codex review`). Reviewer gets plan section + diff; hunts correctness bugs + plan deviations. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
    b. **Reuse/simplicity pass** on the same diff (either engine or fable): hand-rolled code that a shared package / the repo's package index already owns = must-fix; needless complexity = should-fix.
    c. `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
@@ -286,12 +308,13 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    `superpowers:finishing-a-development-branch`.
    **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
    reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
-   tiebreak, never a coin flip. Then **squash-merge to main.**
+   tiebreak, never a coin flip. Consensus pass → emit `GATED`. Then **squash-merge to main** → emit `MERGED`.
 7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. Append the chunk\u2019s decision line to the run map (see Run map). **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
    **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-4.8 for reactor-subtle merges;
    never fable - scoping/planning/review only per the 2026-07-12 steer): run the app, exercise the chunk's new
-   behavior + a core smoke, report → findings become **new kanban cards** linked to the chunk.
+   behavior + a core smoke, report → findings become **new kanban cards** linked to the chunk. Tracer
+   report received → emit `DOGFOODED` (the chunk's final lifecycle stage).
 9. **Fan out.** Spawn the next wave's *independent* chunks in parallel; sequence shared-file/reactor chunks.
 
 ## Liveness monitor - the SECOND spine (waiters catch *done*; the monitor catches *stuck/errored/dead*)
@@ -387,7 +410,8 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
 - **Rotation is ONE atomic instruction:** write the handoff doc + commit + park with an empty prompt — never
   a sequence a watchdog must observe from outside.
 - **Handoff = pointers + fresh query results, never narrative summary** (schema in REFERENCE.md). The
-  successor gets the same SOURCES the predecessor had (ledger path, kanban, agent list, signals file,
+  successor gets the same SOURCES the predecessor had (ledger path, kanban, agent list, event-log
+  cursor + fallback signals file,
   steering overrides), not the predecessor's interpretation; the only prose section is Known-blockers.
 - **Successor protocol:** treat every snapshot field as stale — re-run the command behind it; reconcile
   (orphan sweep) before spawning; re-arm waiters + monitor (process-local, never inherited); register on

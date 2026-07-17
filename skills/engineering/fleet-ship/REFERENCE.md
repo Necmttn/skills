@@ -114,10 +114,14 @@ machine+user (once per fleet run, ledger-cached):
 > (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report as
 > `<report-name>`: commit SHA + test summary + concerns. Do NOT pause to ask how to finish; do NOT push,
 > open a PR, or merge - the orchestrator owns review + merge. SIGNAL STEP (mandatory, LAST, even on failure):
-> append one line
-> `date -Iseconds` + " <report-name> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on
-> BLOCKED/ERROR write the detail + what you need into REPORT.md at the worktree root - stopping without
-> signaling means the orchestrator may never see your result.
+> emit the lifecycle event - on DONE (work committed) run `bun ~/Projects/fleetboard/fleetctl.ts event
+> BUILT --machine <machine-slug> --chunk <chunk-id> --gist "<one-line gist>"` (DONE maps to BUILT at
+> commit); on BLOCKED/ERROR there is no lifecycle stage - ring
+> `bun ~/Projects/fleetboard/fleetctl.ts attn <fleet-id> "<report-name> BLOCKED|ERROR: <one-line gist>"`
+> and write the detail + what you need into REPORT.md at the worktree root. FALLBACK only when the board
+> is unreachable (the fleetctl command exits non-zero): append one line
+> `date -Iseconds` + " <report-name> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>. Stopping
+> without signaling means the orchestrator may never see your result.
 
 ### Discipline block - non-Claude panes (codex/pi; no Skill tool - same discipline spelled out)
 > WORKFLOW (mandatory): FIRST write a short plan before touching code (decompose into tasks, name files+tests,
@@ -132,10 +136,14 @@ machine+user (once per fleet run, ledger-cached):
 > an uncommitted worktree is treated as UNFINISHED), STOP and report as `<report-name>`: commit SHA + test
 > summary + concerns.
 > Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge. SIGNAL
-> STEP (mandatory, LAST, even on failure): append one line `date -Iseconds` + " <report-name>
-> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>, and on BLOCKED/ERROR write the detail + what you
-> need into REPORT.md at the worktree root - stopping without signaling means the orchestrator may never
-> see your result.
+> STEP (mandatory, LAST, even on failure): emit the lifecycle event - on DONE (work committed) run
+> `bun ~/Projects/fleetboard/fleetctl.ts event BUILT --machine <machine-slug> --chunk <chunk-id> --gist
+> "<one-line gist>"` (DONE maps to BUILT at commit); on BLOCKED/ERROR there is no lifecycle stage - ring
+> `bun ~/Projects/fleetboard/fleetctl.ts attn <fleet-id> "<report-name> BLOCKED|ERROR: <one-line gist>"`
+> and write the detail + what you need into REPORT.md at the worktree root. FALLBACK only when the board
+> is unreachable (the fleetctl command exits non-zero): append one line `date -Iseconds` + " <report-name>
+> DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>. Stopping without signaling means the orchestrator
+> may never see your result.
 
 ## Build-pane brief template (one line - no newlines/apostrophes; send + `send-keys Enter`)
 Example of CONTEXT + block fused for a standard build chunk; for other shapes (bug fix, refactor) write your
@@ -349,7 +357,8 @@ Run-map issue: <url>
 - Kanban: <url> - Todo:N InProgress:N Done:N
 - Fleetboard claims held: <list|none>
 - Fleet-tab panes: <machine-slug>/<chunk-id> (<pane_id>): <status> each
-- Signals file: <path> - unreconciled DONE|BLOCKED|ERROR lines
+- Event log: last reconciled seq <cursor> (from the ledger) - unreconciled lifecycle events since it
+- Signals fallback file: <path> - unreconciled offline DONE|BLOCKED|ERROR lines
 ## In-flight per chunk (unmerged only)
 - <machine-slug>/<chunk-id>: worktree, branch, pane <machine-slug>/<chunk-id> (<pane_id>), stage,
   waiter/monitor armed y/n
