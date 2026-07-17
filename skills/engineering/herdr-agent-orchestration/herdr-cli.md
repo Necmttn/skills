@@ -24,4 +24,4 @@ Every command talks to the running herdr server over its socket. Prefix with `ss
 - `herdr --remote user@host --session <name>` - attach as thin client; server runs on host, UI streams to you. Detach `ctrl+b q`; agents persist.
 
 ## Input hygiene
-Before `send`: `read --source visible` and confirm an empty prompt. Dismiss rating prompts (`0`), trust/hook prompts (select + `Enter`), and clear any user-typed text. `send` appends to whatever is already there.
+Before `send`: `read --source visible` and confirm an empty prompt. Dismiss rating prompts (`0`), trust/hook prompts (select + `Enter`), and clear any user-typed text. `send` appends to whatever is already there (verified live 2026-07-17).

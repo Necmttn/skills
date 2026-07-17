@@ -567,14 +567,14 @@ Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
 ## Hard rules (live-dogfood lessons)
 - **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt
   before `send`; submit is a separate `send-keys Enter`.
-- **`agent send` REPLACES the prompt line - it does NOT append; and `send-keys Enter` alone CANNOT submit
-  a human-typed parked draft (2026-07-10, bit twice in one session).** A bare Enter on a user-typed draft
-  silently no-ops (pane stays idle, draft stays parked - verify status flipped to `working` after EVERY
-  submit, never assume). And steering a pane that holds a parked draft CLOBBERS the draft (a user's
-  'ping me when A14 lands' was overwritten by a steer). Correct protocol to submit a parked draft:
-  (1) `agent read` to capture the draft text + log it, (2) `agent send <the same text>` (the replace
-  makes it submittable), (3) `send-keys Enter`, (4) confirm status = `working`. Only then send your own
-  steering as the next message.
+- **`agent send` APPENDS to whatever is on the prompt line (verified live 2026-07-17); NEVER send onto a
+  non-empty prompt.** The 2026-07-10 "replaces" reading was wrong: under append, steering a pane that holds
+  a parked draft CORRUPTS it by concatenation, which is what that incident actually showed. A bare
+  `send-keys Enter` on a human-typed parked draft still cannot be trusted to submit it; verify status flips
+  to `working` after EVERY submit, never assume. Correct parked-draft submit protocol: (1) `agent read` to
+  capture + log the draft, (2) `send-keys Ctrl+U`, then fresh-read to confirm an empty prompt, (3) `agent
+  send <full intended text>`, then fresh-read to confirm it arrived intact, (4) `send-keys Enter`, (5)
+  confirm status = `working`. Only then send your own steering as the next message.
 - **Name everything locally; qualify everything externally.** `agent start <chunk-id>` — the herdr NAME is
   the bare chunk id, unique only inside that server's own agent table (never generic like `codex`: detected
   labels are also targets → ambiguous locally). ALL `herdr agent *` commands (get/read/send/wait/rename/

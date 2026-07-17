@@ -241,13 +241,13 @@ Error signatures (grep the tail case-insensitively - extend per engine):
 ```sh
 STATE="${1:-/tmp/herdr_monitor_state}"; STALL_SWEEPS="${2:-4}"   # 4 sweeps × ~120s ≈ 8 min stuck-threshold
 MACHINE_SLUG="${MACHINE_SLUG:?export the fleetctl join machine slug}"
-# export NAMES="chunk-a chunk-b …" (your fleet's chunk ids) OR FLEET_TAB=<fleet tab id> before running - scoping is mandatory
+# export NAMES="chunk-a chunk-b …" (your fleet's chunk ids) OR export FLEET_TAB=<fleet tab id> (filtered client-side; herdr agent list takes no flags) before running - scoping is mandatory
 SIG='out of credits|rate.?limit|429| 403 | 5[0-9][0-9] |ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found'
 touch "$STATE"
 for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestrator on exit
   # Scope to THIS fleet's chunk names ONLY - never ring on the orchestrator or a sibling fleet's panes.
   # Set NAMES to your chunk ids ("chunk-a chunk-b …") OR filter agent list by your fleet tab id.
-  NAMES="${NAMES:-$(herdr agent list --tab "$FLEET_TAB" | python3 -c 'import sys,json;[print(a["name"]) for a in json.load(sys.stdin)["result"]["agents"] if a.get("name")]' 2>/dev/null)}"
+  NAMES="${NAMES:-$(herdr agent list | python3 -c 'import sys,json,os;[print(a["name"]) for a in json.load(sys.stdin)["result"]["agents"] if a.get("name") and a.get("tab_id")==os.environ.get("FLEET_TAB")]' 2>/dev/null)}"
   for N in $NAMES; do
     REPORT_NAME="$MACHINE_SLUG/$N"
     WT=".claude/worktrees/$N"

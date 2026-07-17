@@ -34,7 +34,7 @@ When a tab is involved, two more rules:
 
 Never drive a `working` agent - you interrupt its turn. Wait for idle (`herdr agent wait <pane> --status idle`).
 
-Before every `send`, clear the prompt line: dismiss rating and approval overlays, and delete any unsent text the user left typed - `send` appends, so stray text corrupts your command. **Done when: a fresh `read` of the target shows idle with an empty prompt.**
+Before every `send`, clear the prompt line: dismiss rating and approval overlays, and delete any unsent text the user left typed - `send` appends, so stray text corrupts your command (verified live 2026-07-17). **Done when: a fresh `read` of the target shows idle with an empty prompt.**
 
 ## Remote is the same socket
 
