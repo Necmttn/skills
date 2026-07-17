@@ -68,9 +68,32 @@ holder may touch main - so on expiry (or on noticing you have outlived the TTL):
 rebase/merge (`git rebase --abort` / `git merge --abort`; main stays untouched, your gated branch is
 durable), re-enter the FIFO queue, and on reacquire restart from step 2 - main has moved. Steps 2-5 happen
 ONLY while you verifiably hold the claim.
-Forward pointers, out of scope here: hold-tagged chunks stop at GATED for the human (#33); chunk→machine
-placement stays on the Mac (#35); claim DO/alarm internals are Fleetboard v2 (#15). This protocol is
-E2E-verified by the tracer bullet (skills#13), not a unit suite.
+Hold-tagged chunks stop at GATED for the human before this flow - see Held chunks below (#33). Forward
+pointers, out of scope here: chunk→machine placement stays on the Mac (#35); claim DO/alarm internals are
+Fleetboard v2 (#15). This protocol is E2E-verified by the tracer bullet (skills#13), not a unit suite.
+
+### Held chunks - hold:human stops at GATED (skills#33)
+Autonomous merge on workflow pass is the DEFAULT - a hold is the named exception, never a new gate on
+everything. The Mac scheduler tags `hold:human` (or `hold:central`) at ASSIGNMENT on exactly three chunk
+classes: **reactor-subtle, security-critical, user-facing design** (tagging + placement are #35's - here
+you only honor a tag that arrives). The tag travels in the chunk's queue entry; whoever runs the chunk
+(steward or orchestrator) honors it per chunk:
+1. Run the FULL per-chunk loop unchanged through the consensus gate → emit `GATED` (the lifecycle
+   event) → **STOP. Do NOT claim `main-merge`.**
+2. **Ring the bell:** `fleetctl attn <fleet-id> "<slug>/<chunk-id> <one-line gate verdict> <link>"` -
+   machine-namespaced chunk id + gate verdict + a LINK the owner can open: today a PR/compare URL or the
+   chunk's run-archive section; when the access-plane link surface lands (#11) the link upgrades to its
+   artifact URL - forward pointer only, do not block on it.
+3. Flip the pane label to `✋ <chunk-id>` (the existing needs-a-HUMAN glyph, already paired with
+   `fleetctl attn`) - mirrored on the board's attention list per the sidebar invariant.
+4. **Poll `/state` for the owner's answer on YOUR attn item** (the bell rule's existing poll). Two
+   branches, both explicit:
+   - **approve** → proceed to Merge under claim above, UNCHANGED (claim/FIFO → rebase → local root gate →
+     squash-merge → `MERGED` → release).
+   - **reject / changes** → SEND-BACK: re-open the chunk with the owner's findings as the brief - a fresh
+     spawn in the SAME worktree (the Housekeeping send-back pattern), findings judged via
+     `superpowers:receiving-code-review`; the chunk re-enters the loop at build and re-rings on its next
+     `GATED`.
 
 ## Skills this composes (the chain - invoke these, don't reinvent)
 - **Drive panes:** `herdr-agent-orchestration` (read FIRST - `agent list/read/send/wait`, `pane send-keys`, `agent start`).
@@ -344,9 +367,10 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    `superpowers:finishing-a-development-branch`.
    **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
    reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
-   tiebreak, never a coin flip. Consensus pass → emit `GATED`. Then merge **under the `main-merge` claim** -
-   the ordered Merge-under-claim flow (claim/queue FIFO → rebase on main → LOCAL repo-root gate →
-   squash-merge → emit `MERGED` → release); never merge outside it.
+   tiebreak, never a coin flip. Consensus pass → emit `GATED`. **Hold-tagged chunk: STOP here - the
+   Held-chunks flow (bell + the owner's board answer) owns the merge decision.** Untagged (the default):
+   merge **under the `main-merge` claim** - the ordered Merge-under-claim flow (claim/queue FIFO → rebase
+   on main → LOCAL repo-root gate → squash-merge → emit `MERGED` → release); never merge outside it.
 7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. Append the chunk\u2019s decision line to the run map (see Run map). **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
    **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-4.8 for reactor-subtle merges;
@@ -478,7 +502,10 @@ Idle machines run ONLY the heartbeat daemon - no idle steward stays resident.
   `DOGFOODED` stays Mac-emitted (dogfood triggering is a kept duty). The steward DOES file `follow-up`
   issues at its own gate triage (its gate, its findings); but the Mac reconciles kanban cards + run map
   from the event log on its wakes - a steward never edits cards or the map.
-- **Hold tags honored:** a hold-tagged chunk is never spawned; it stays queued and is listed in the handoff.
+- **Hold tags honored (skills#33):** the hold tag arrives in the chunk's queue entry at assignment. The
+  steward runs the held chunk's FULL workflow but follows Held chunks above: stop at `GATED`, bell with
+  `<slug>/<chunk-id>` + verdict + link, `✋` pending the owner's answer; merge (under claim) only on
+  approve, send back on reject. A chunk still awaiting its answer at rotation/exit is listed in the handoff.
 - **Rotation - same policy, VERBATIM:** the Orchestrator-rotation triggers above apply to stewards
   unchanged (~70-75% context, 4-6h wall clock, 2 same-cause blocked cycles, user says rotate), and the
   same successor protocol holds - the successor steward re-derives from the board + local herdr state.
