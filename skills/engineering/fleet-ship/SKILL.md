@@ -170,6 +170,30 @@ this skill; record which lane file version a run used in the ledger. Resolution 
 override into the run ledger (so a resumed orchestrator keeps honoring it), and ask once whether to persist
 it into this table as the new default.
 
+### Placement - after lane selection: (chunk, lane) → (machine slug, steward assignment) (skills#35)
+Lane selection above picks WHAT engine runs a chunk; placement picks WHERE. The **Mac orchestrator** - and
+only it, placement is a kept duty (#6 point 6) - composes per chunk:
+**chunk → lane (engine, resolution order above) → machine (registry match) → steward assignment.**
+- **Pinned contract (the stable interface):** inputs `(chunk, lane)` → outputs `(machine slug, steward
+  assignment incl. hold tags)`. The slug is the machine id minted by `fleetctl join --name <slug>`; the
+  assignment lands in that machine's queue on the fleetboard - the steward is the assignment TARGET
+  (Steward mode below, skills#30), or the Mac orchestrator runs the chunk itself when the target machine
+  is the Mac (a Mac-local chunk has no separate steward) - with any hold tags attached to the queue entry.
+- **Machine match = registry match (#5 schema), all tiers:** **engines-with-account** (the lane's engine
+  authed there AND its quota pool owner-consented) · **static** (capability vs the chunk's declared needs)
+  · **dynamic** (in-window now, free slot, not stale) · **policy** (owner limits honored).
+- **`~/.ax/fleet-routing.json` stays engine-policy-only (#5 point 4):** lanes never name machines - NO
+  machine-qualified lanes, NO lane×machine cross-product file. Machines live in the registry; engine
+  policy lives in the lane file; the two meet only here, at placement.
+- **Hold tagging happens HERE - at assignment, on the Mac orchestrator (#6 points 5-6):** the three held
+  classes (reactor-subtle, security-critical, user-facing design) get `hold:human` (or `hold:central`)
+  attached to the assignment; whoever runs the chunk honors the tag per Held chunks above (skills#33).
+- **Algorithm slot - OPEN interface:** WHICH eligible machine wins among registry-match survivors
+  (scoring, quotas, time windows, preemption) is the policy decided in skills#10 (resolved: scheduling
+  policy - placement, quotas, time windows), to be implemented by a separate algorithm-implementation
+  chunk behind this contract. Nothing in this interface presumes those details. Like the rest of the fleet
+  protocol, placement is E2E-verified by the tracer bullet (skills#13), not a unit suite.
+
 ## Sidebar legibility — the herdr sidebar IS the human's status board
 The user reads the sidebar to know *what needs me* vs *what's fine* — an unnamed pane, a duplicate
 workspace label, or a stale label is a housekeeping DEFECT (live audit 2026-07-16: 6 of 8 agents unnamed,
