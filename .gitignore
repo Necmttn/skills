@@ -1,1 +1,6 @@
 node_modules
+
+# fleet-ship scratch (worktree-root briefs/reports + local worktrees)
+/.worktrees/
+/BRIEF.md
+/REPORT.md
