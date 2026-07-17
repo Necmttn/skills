@@ -12,8 +12,8 @@ git worktree and lands via PR/merge.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Fix three verified doc defects (monitor scoping, send semantics, fences) | P1 | S | - | TODO |
-| 003 | Deterministic ledger-driven teardown script | P1 | M | - | TODO |
+| 001 | Fix three verified doc defects (monitor scoping, send semantics, fences) | P1 | S | - | IN PROGRESS (v2: send APPENDS proven live; hard-rule rewrite inverted; fences fixed upstream) |
+| 003 | Deterministic ledger-driven teardown script | P1 | M | - | DONE (51325e4) |
 | 002 | Single-source duplicated rules (SKILL 15-25% smaller) | P2 | M | 001 | TODO |
 | 004 | Spike: workspace-per-fleet isolation boundary | P3 | S–M | - | TODO |
 
