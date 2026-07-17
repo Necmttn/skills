@@ -314,6 +314,24 @@ Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) or local
 `herdr session attach $NAME`; for a remote interactive re-entry use
 `herdr --remote <host> --session <session>` (UI attach only, never a driving-command prefix).
 
+## Teardown
+
+```sh
+scripts/fleet-teardown.sh <ledger-path> --epic <epic> [--archive-dir docs/superpowers/fleet-runs] [--execute]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--epic <epic>` | Required archive filename stem. |
+| `--archive-dir <dir>` | Capture destination; defaults to `docs/superpowers/fleet-runs`. |
+| `--execute` | Archive and close exact ledger resources. Without it, the script only prints its dry-run plan. |
+
+The ledger grammar is `RES <tab|pane|agent|workspace> <id> <label>` for minted resources,
+`CLOSED <id>` after each resource is reconciled, and
+`TEARDOWN-DONE <n closed> <timestamp>` after teardown verifies no recorded panes or agents survive.
+Re-running the dry-run against the last run's ledger is the teardown smoke test; every resource should
+show `already-closed`.
+
 ## Kanban (GitHub Project v2 via gh; needs `project` scope)
 ```sh
 gh project create --owner <user> --title "<title>" --format json        # → number + id (PVT_…)

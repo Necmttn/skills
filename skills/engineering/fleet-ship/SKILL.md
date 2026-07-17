@@ -460,7 +460,9 @@ tracked by exact path") extended to every herdr resource:
 - **Teardown reads the ledger, never the sidebar.** At run end (and before any rotation handoff):
   list still-open RES lines → archive-then-close each pane by exact id → close tabs last → VERIFY
   (`herdr pane list --workspace <ws>` + `tab list`: zero fleet-minted resources remain) → append
-  `TEARDOWN-DONE <n closed>` to the ledger. `fleetctl deregister` only AFTER teardown-verify.
+  `TEARDOWN-DONE <n closed>` to the ledger. Run it, don't hand-roll it:
+  `scripts/fleet-teardown.sh <ledger> --epic <epic>` (dry-run), then add `--execute`.
+  `fleetctl deregister` only AFTER teardown-verify.
 - **Exact ids only** — never pattern-match labels (`fleet:*`) to find things to close; concurrent
   fleets share the namespace (same live lesson as the worktree cleanup regex).
 - **Rotation-safe:** the handoff doc carries the open RES lines; the successor inherits the teardown
