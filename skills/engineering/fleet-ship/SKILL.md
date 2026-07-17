@@ -419,6 +419,39 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
 - Keep the handoff REFRESHED as part of parking (existing hard rule) so an unplanned death degrades into a
   planned rotation.
 
+## Steward mode - on-demand per-machine orchestrator (skills#30; spec #24 + #6)
+A **steward** is this skill's orchestrator run ON a non-primary machine: spawned when the Mac
+orchestrator's scheduler assigns chunks to that machine (the steward is the assignment TARGET - the
+placement interface/algorithm stays on the Mac and out of scope here), gone when its queue empties.
+Idle machines run ONLY the heartbeat daemon - no idle steward stays resident.
+- **Division of labor (spec #6, exact):** the **Mac orchestrator keeps** wave planning, chunk-to-machine
+  placement, hold tagging, kanban/run-map upkeep, dogfood triggering, and the human interface. The
+  **steward runs the FULL fleet-ship workflow locally** on its own machine: worktrees, pane spawn/brief,
+  idle-waiters + the liveness monitor, the cross-model consensus gate, and the merge (under the
+  `main-merge` claim like any orchestrator).
+- **Locality is the point:** waiters, monitor loops, and gates ALWAYS run on the steward's own machine -
+  NEVER held open over ssh (a held-open remote loop dies with the connection; that fragility is why
+  steward mode exists). ssh from the Mac stays for one-shot reads/spawns only. The monitor's "whole
+  fleet" scope reads per-machine in steward mode: each steward runs ONE monitor loop covering ITS panes.
+- **Events, not cards:** the steward emits the lifecycle stages it owns (`ASSIGNED → … → MERGED`, always
+  `--machine <slug>` - see Child→parent lifecycle events); `BUILT` is pane-pushed by the discipline
+  block's SIGNAL STEP, so the steward emits BUILT itself ONLY on `READY_UNCOMMITTED` (never a duplicate);
+  `DOGFOODED` stays Mac-emitted (dogfood triggering is a kept duty). The steward DOES file `follow-up`
+  issues at its own gate triage (its gate, its findings); but the Mac reconciles kanban cards + run map
+  from the event log on its wakes - a steward never edits cards or the map.
+- **Hold tags honored:** a hold-tagged chunk is never spawned; it stays queued and is listed in the handoff.
+- **Rotation - same policy, VERBATIM:** the Orchestrator-rotation triggers above apply to stewards
+  unchanged (~70-75% context, 4-6h wall clock, 2 same-cause blocked cycles, user says rotate), and the
+  same successor protocol holds - the successor steward re-derives from the board + local herdr state.
+  ONE rotation policy; steward mode does not fork a second one.
+- **Exit-on-empty:** queue empty → ledger-driven teardown-verify (Resource ledger rules) → write the
+  rotation handoff (the REFERENCE schema, extended with machine slug + held-claim state) → confirm the
+  last chunk's terminal lifecycle event is on the board → `fleetctl deregister` → park/exit.
+- **Naming (#26 rules, unchanged):** local herdr names stay bare (`<chunk-id>`; the steward's own pane is
+  `steward:<epic>`), tab `fleet:<epic>@<slug>`, and EVERY off-machine surface - events, ledgers, reports,
+  attention/bell lines, archives, handoffs - says `<slug>/<chunk-id>`.
+Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
+
 ## Hard rules (live-dogfood lessons)
 - **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt
   before `send`; submit is a separate `send-keys Enter`.

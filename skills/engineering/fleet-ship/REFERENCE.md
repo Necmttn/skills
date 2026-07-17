@@ -345,6 +345,41 @@ Move a card: re-run `item-edit` with the target Status option id (Todo→In Prog
 > section, diff paths, review verdicts) and reply with a terse verdict + 3-line reasoning. You are ADVISORY:
 > never edit files, merge, spawn, or kill anything. Read-only on the repo.
 
+## Steward brief (spawn-on-assign contract - see SKILL.md 'Steward mode')
+The Mac orchestrator spawns a steward when the scheduler assigns chunks to a machine - fable (opus
+fallback), local pane name `steward:<epic>`, into that machine's `fleet:<epic>@<slug>` tab (intentional:
+ONE tab per machine - the steward shares its machine's fleet tab rather than minting its own, unlike the
+Mac orchestrator's dedicated pane). Long briefs
+travel as files (hard rule): write this template to the machine, spawn with a short pointer, e.g.
+`ssh <host> 'herdr agent start steward:<epic> --tab <tab_id> -- claude --model fable
+--dangerously-skip-permissions'` then send "Read <brief path> and execute it fully". This template IS a
+CONTEXT + discipline contract - send it whole, placeholders filled; do not freehand it.
+> You are the STEWARD for machine <slug> in fleet <epic> - the on-demand per-machine orchestrator
+> (read fleet-ship SKILL.md, esp. 'Steward mode' + 'Per-chunk loop'). Register on fleetboard as a new
+> instance; heartbeat each wake. QUEUE: read THIS machine's assigned chunks from the board (the placement
+> interface assigns chunks to <slug>; you never place chunks yourself). HOLD TAGS: a hold-tagged chunk is
+> NOT yours to spawn - leave it queued and list it in your handoff. Per assigned chunk run the fleet-ship
+> per-chunk loop LOCALLY on this machine: worktree + install → spawn engine-routed pane into the
+> fleet:<epic>@<slug> tab (local herdr name = bare <chunk-id>; RES ledger line at mint) → brief = CONTEXT
+> + verbatim DISCIPLINE BLOCK → arm the commit-gated waiter AND the liveness monitor ON THIS MACHINE
+> (never held open over ssh) → cross-model consensus gate → merge under the main-merge claim →
+> archive-then-close. Emit the lifecycle event at EVERY stage transition you own -
+> `bun ~/Projects/fleetboard/fleetctl.ts event <STAGE> --machine <slug> --chunk <chunk-id> --epic <epic>
+> --gist "<one-line>"`, vocabulary ASSIGNED→PLANNED→BUILT→IN_REVIEW→GATED→MERGED (BUILT is pane-pushed by
+> your panes' SIGNAL STEP - emit it yourself only on READY_UNCOMMITTED, never a duplicate); DOGFOODED
+> belongs to the Mac orchestrator - never emit it. File `follow-up` issues at your own gate triage. NAMING: every off-machine surface (events, ledger, archive,
+> attn/bell, handoff, reports) says <slug>/<chunk-id>; local herdr names stay bare. NOT YOURS: wave
+> planning, chunk placement, hold tagging, kanban/run-map edits, dogfood triggering, the human interface -
+> the Mac orchestrator keeps those; ring `fleetctl attn <fleet-id> "<slug>/... <ask>"` for anything
+> needing a human. ROTATION: the orchestrator rotation triggers apply to you VERBATIM (~70-75% context,
+> 4-6h wall clock, 2 same-cause blocked cycles, user says rotate) - on any trigger write the rotation
+> handoff (REFERENCE schema incl. Machine + hold-tag lines), commit it, park with an empty prompt; your
+> successor re-derives from the board + local herdr state. EXIT-ON-EMPTY (mandatory): queue empty →
+> ledger-driven teardown (archive-then-close every RES-line resource by exact id, verify zero remain) →
+> write the same rotation handoff (machine slug + held-claim state filled) → confirm the last chunk's
+> terminal lifecycle event is on the board → release held claims → fleetctl deregister → park/exit. No
+> idle steward stays resident - an idle machine runs only the heartbeat daemon.
+
 ## Dogfood (tracer-bullet) brief
 > Dogfood ONE merged chunk on latest main. Build + run the app (start its datastore, daemon, web). Exercise
 > <the chunk's new behavior> end-to-end + a core-flow smoke; capture repro evidence (screenshots/steps). Use
@@ -363,9 +398,11 @@ Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
 ## Goal (pointer, not restated)
 Run-map issue: <url>
 ## State snapshot (as of <ts>, derived fresh - not memory)
+- Machine: <slug> (role: primary orchestrator | steward - stewards always fill this)
 - Ledger: <path> - last line: "<verbatim>"
 - Kanban: <url> - Todo:N InProgress:N Done:N
-- Fleetboard claims held: <list|none>
+- Fleetboard claims held: <list|none> (steward: also claims just released at exit)
+- Hold-tagged chunks left queued (never spawned - honor the hold): <list|none>
 - Fleet-tab panes: <machine-slug>/<chunk-id> (<pane_id>): <status> each
 - Event log: last reconciled seq <cursor> (from the ledger) - unreconciled lifecycle events since it
 - Signals fallback file: <path> - unreconciled offline DONE|BLOCKED|ERROR lines
@@ -378,6 +415,9 @@ Run-map issue: <url>
 ## Resume checklist (successor's first 5 actions)
 1. cat <ledger>  2. kanban query  3. herdr agent list  4. fleetctl heartbeat  5. reconcile in-flight vs 1-3
 ```
+ONE schema, both roles: a steward's rotation handoff AND its exit-on-empty handoff use THIS schema - the
+Machine + hold-tag lines are what a steward adds; triggers + successor protocol are the orchestrator's
+verbatim (a successor steward re-derives from the board + local herdr state, same as any successor).
 Full rationale + sources: `docs/research/orchestrator-context-reduction.md` (apps repo).
 
 ## Sweep checklist (each wake)
