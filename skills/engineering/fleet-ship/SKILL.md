@@ -188,11 +188,31 @@ only it, placement is a kept duty (#6 point 6) - composes per chunk:
 - **Hold tagging happens HERE - at assignment, on the Mac orchestrator (#6 points 5-6):** the three held
   classes (reactor-subtle, security-critical, user-facing design) get `hold:human` (or `hold:central`)
   attached to the assignment; whoever runs the chunk honors the tag per Held chunks above (skills#33).
-- **Algorithm slot - OPEN interface:** WHICH eligible machine wins among registry-match survivors
-  (scoring, quotas, time windows, preemption) is the policy decided in skills#10 (resolved: scheduling
-  policy - placement, quotas, time windows), to be implemented by a separate algorithm-implementation
-  chunk behind this contract. Nothing in this interface presumes those details. Like the rest of the fleet
+- **Placement algorithm - filter-then-priority (deliberately dumb v1, resolved in skills#10):** WHICH
+  eligible machine wins among registry-match survivors is decided by two deterministic passes over the
+  registry fields (#5 schema). **Hard filters - a machine must pass ALL:** machine `state === "active"`
+  (drop pending/stale) · the lane's engine is authed on the machine **AND** owner-consented per the
+  machine's per-engine consent policy (default `owner-only` on machines the operator doesn't own - see gap
+  below) · **capability match** of the chunk's declared `needs` (scheduler-declared at wave planning,
+  default none -> every machine passes) against the static tier (e.g. an Xcode-needing chunk requires
+  non-null `xcodeVersion` and/or the required `simRuntimes` entry) · `inWindowNow` (window FILTER only -
+  never place out-of-window; the graceful close/drain + hard grace cap is steward RUNTIME behavior spec'd in
+  skills#10 point 3, not yet landed in Steward mode - follow-up) · `freeSlots > 0` · a chunk flagged long/judgment is filtered OUT of
+  `preemptible === true` machines. **Priority among survivors (first differing key wins, fully
+  reproducible):** pinned (`policy.preemptible === false`) before preemptible -> warm worktree/cache for the
+  repo (**skipped when the signal is absent** - no registry field carries it today, a v1 no-op; see gap) ->
+  most `freeSlots` -> alphabetical machine slug. **No migration after placement.** Mid-chunk account-dry
+  raises the existing escalation and `BLOCKED: quota` stops further placement of that engine on that machine
+  for the run. Rejected for v1 (all learnable later from the event log): scoring, quota-remaining
+  weighting, latency-aware placement. This is the policy resolved in skills#10; like the rest of the fleet
   protocol, placement is E2E-verified by the tracer bullet (skills#13), not a unit suite.
+- **Registry gaps this v1 degrades around (documented, not invented - follow-up candidates):** (1) the
+  policy tier carries no `enginesPolicy` per-engine consent field yet (skills#10 spells it `engines_policy`) - the authed-AND-consented filter is
+  specified but reads `owner-only` on non-owned machines until that field lands; (2) no per-repo
+  warm-worktree/cache signal exists - that priority tier is a no-op today; (3) chunks carry no declared
+  `needs` capability channel beyond the scheduler's default-none - capability match passes every machine
+  until chunks declare `needs`. All three degrade gracefully now and keep the algorithm executable from
+  today's fields.
 
 ## Sidebar legibility — the herdr sidebar IS the human's status board
 The user reads the sidebar to know *what needs me* vs *what's fine* — an unnamed pane, a duplicate
