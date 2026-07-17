@@ -296,9 +296,19 @@ mkdir -p docs/superpowers/fleet-runs
     | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])'; echo;
 } >> "docs/superpowers/fleet-runs/$EPIC.md"
 git add "docs/superpowers/fleet-runs/$EPIC.md" && git commit -m "chore(fleet): archive $REPORT_NAME result"
-# 2. THEN teardown
+# 2. THEN teardown (capture the worktree's ABSOLUTE path before removing it)
 PID=$(herdr agent get "$NAME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["pane_id"])')
+WT="$(cd ".claude/worktrees/$NAME" && pwd)"
 herdr pane close "$PID"; git worktree remove .claude/worktrees/$NAME --force; git branch -D feat/$NAME
+# 3. DerivedData sweep - each Xcode build in a worktree mints ~/Library/Developer/Xcode/DerivedData/<App>-<hash>,
+#    5-9GB per app; unswept they pile up (394GB / 80 dirs, live lesson 2026-07-17).
+#    Match ONLY by exact WorkspacePath inside the removed worktree - never by app-name pattern
+#    (concurrent fleets build the same app from other worktrees).
+for p in ~/Library/Developer/Xcode/DerivedData/*/info.plist; do
+  case "$(/usr/libexec/PlistBuddy -c 'Print :WorkspacePath' "$p" 2>/dev/null)" in
+    "$WT"/*) rm -rf "$(dirname "$p")";;
+  esac
+done
 ```
 Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) or local
 `herdr session attach $NAME`; for a remote interactive re-entry use
