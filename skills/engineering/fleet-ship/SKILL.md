@@ -365,10 +365,17 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
    **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
    mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
-   only by reading the pane status line). Pane spawned → emit `ASSIGNED`
+   only by reading the pane status line). **Codex panes have an extra, bounded launch gate:** after accepting
+   the trust modal, prove the unique argv-turn token appears in the **normalized** tail and substantive Codex
+   activity follows it while status is `working|idle|done`; `working` and the echoed prompt alone are only
+   boot activity, not proof that the brief ran. If the gate reaches its deadline, emit/ring `BOOT_HUNG` and
+   leave the pane intact — do not arm its waiter and never auto-kill it. Run the bundled verifier in
+   REFERENCE's “Codex pane launch protocol”. Pane spawned → emit `ASSIGNED`
    (`fleetctl event ASSIGNED --machine <slug> --chunk <chunk-id> --epic <epic> --gist "spawned <engine>"`).
-4. **Brief** (literal `agent send`, then a separate `pane send-keys Enter`). A brief = **CONTEXT section
-   (varies per chunk: spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
+4. **Brief.** For Codex, the argv pointer from the bounded verifier in step 3 is the first brief — do **not**
+   `agent send` it again; wait for `BOOT_READY` before any later steering. For other panes, use literal
+   `agent send`, then a separate `pane send-keys Enter`. A brief = **CONTEXT section** (varies per chunk:
+   spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
    (fixed — copy it VERBATIM from REFERENCE.md, never freehand it)**. The block carries the whole chain:
    PLAN first (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) →
    seam rule (point at `testing-anti-patterns.md`; a behavior-bearing chunk asserts the *observable effect
@@ -395,7 +402,8 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    skills (`superpowers:*`) additionally require that plugin installed under the pane's user — file-sync
    alone never provides them. Plan approved (the pane's written plan lands; AWAITING-DECISION design
    chunks: when the user's decision arrives) → emit `PLANNED`.
-5. **Arm waiter + monitor.** Run the canonical background waiter from REFERENCE: `herdr agent wait` supplies
+5. **Arm waiter + monitor.** For Codex, do this only after the bounded past-boot launch gate succeeds. Run the
+   canonical background waiter from REFERENCE: `herdr agent wait` supplies
    bounded backpressure only, then `herdr agent get` payloads gate on `agent_status` in `idle|done`; never
    treat the wait command's exit code as completion. AND ensure the fleet **liveness monitor** loop is
    running (it sweeps this pane for stuck/errored/dead).
@@ -431,14 +439,17 @@ think it's building. Waiters alone are blind to this - so run ONE wall-clock mon
 in parallel with the per-pane waiters. It RINGS; it does not auto-kill (classify via tail first - never kill a
 genuinely-`working` pane).
 1. **Sweep every ~2 min** (`run_in_background`, re-arming): `herdr agent list` → for each active fleet pane
-   snapshot `{status, output-tail hash, commits-beyond-main, dirty}` and diff vs the last snapshot in a state
+   snapshot `{status, normalized-tail fingerprint, commits-beyond-main, dirty}` and diff vs the last snapshot in a state
    file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
 2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script) → ring immediately
    (`fleetctl attn <fleet-id> "<machine-slug>/<chunk-id> errored: <line>"` + PushNotification on the
    user's Mac); don't wait out K sweeps.
-3. **STUCK** - status + output-hash + commit-count ALL unchanged for K sweeps (~6-10 min) while status ∉
-   `{idle,done}` → ring. Read the tail to classify: real long compile/suite (re-arm, leave it) vs frozen
-   (recover). A pane legitimately on a background shell shows *changing* output/logs - a frozen one is inert.
+3. **STUCK** - status + normalized-tail fingerprint + commit-count ALL unchanged for K sweeps (~6-10 min)
+   while status ∉ `{idle,done}` → ring. The normalizer ignores only volatile terminal chrome (spinner elapsed
+   time, `esc to interrupt`, context-% footer), so a boot spinner now goes stale while real commands, logs,
+   model output, and errors still count as progress. Read the tail to classify: real long compile/suite
+   (re-arm, leave it) vs frozen (recover). A pane legitimately on a background shell shows *changing*
+   output/logs - a frozen one is inert.
 4. **DEAD/gone** - pane vanished from `agent list` (crashed / user closed) but its chunk isn't merged → ring +
    re-spawn on the fallback engine in the SAME already-installed worktree.
 5. **Recover a caught pane** via the Hard-rules credits/frozen path: close the dead pane → re-spawn

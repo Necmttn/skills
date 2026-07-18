@@ -43,17 +43,50 @@ worktree on smarter lane, no asking (intelligence > taste > cost).
 tandem/review, wasteful on mechanical lanes. Mechanical + spark lanes pin `-c model_reasoning_effort="medium"`
 (2026-07-16); tandem pins `"max"` explicitly. Escalate effort together with the lane on gate failure.
 
+### Fleet-ship script location
+The bundled launch verifier resolves its sibling `monitor-tail.py` itself. `FLEET_SHIP_DIR` is only a shell
+shorthand for the directory containing this `REFERENCE.md`; set it once when a copied `/tmp` monitor needs to
+call `monitor-tail.py`:
+
+```sh
+# From a source checkout (run at that checkout's root):
+export FLEET_SHIP_DIR="$PWD/skills/engineering/fleet-ship"
+# From an installed skill: use the actual directory/symlink target that contains REFERENCE.md.
+# Example: export FLEET_SHIP_DIR="$HOME/.claude/skills/fleet-ship"
+test -f "$FLEET_SHIP_DIR/scripts/monitor-tail.py" || { echo "fleet-ship scripts not found"; exit 2; }
+```
+
 **Codex pane launch protocol (verified live 2026-07-16 - REQUIRED, panes die otherwise):** codex TUI
 launched with `--dangerously-bypass-approvals-and-sandbox` boots into a Yes/No trust MODAL, and ANY text
 delivered while the modal is up (`agent send`, `pane send-text`) CRASHES the pane - this reads as "codex
-died on brief". Protocol: (1) pass the brief pointer AS AN ARGUMENT at spawn:
-`herdr agent start <chunk> --cwd <wt> --tab <tab> -- codex --dangerously-bypass-approvals-and-sandbox "Read BRIEF.md and execute it fully"`;
-(on another machine: `ssh <host> 'herdr agent start <chunk> --cwd <wt> --tab <tab> -- codex
---dangerously-bypass-approvals-and-sandbox "Read BRIEF.md and execute it fully"'`);
-(2) wait for boot (~10s), then send ONE bare `herdr pane send-keys <pane> Enter` on that server
-(`ssh <host> 'herdr pane send-keys <pane> Enter'` from elsewhere) to accept the modal - codex then runs the
-argv prompt; (3) never send further text until status shows it working past the modal.
-Headless alternative when no steering is needed: `codex exec --dangerously-bypass-approvals-and-sandbox "<brief>"`
+died on brief". `working` alone is NOT proof that the argv prompt ran: the startup spinner also reports
+`working`. Protocol: (1) pass the brief pointer plus a unique turn token AS AN ARGUMENT at spawn; (2) wait
+for boot (~10s), then send ONE bare `herdr pane send-keys <pane> Enter` on that server to accept the modal;
+(3) before any further send or waiter, use the bounded check below. It requires an acceptable status
+(`working|idle|done`), the token in the normalized tail, **and substantive Codex `•` activity after that
+prompt**. The echoed prompt itself is not evidence. A deadline emits `BOOT_HUNG` and rings; it NEVER
+auto-kills the pane.
+
+```sh
+# Run this on the pane's server. The bundled command resolves monitor-tail.py beside itself.
+N=<chunk-id>; WT=<worktree>; TAB=<fleet-tab-id>; REPORT_NAME=<machine-slug>/<chunk-id>
+bash "$FLEET_SHIP_DIR/scripts/verify-codex-launch.sh" "$N" "$WT" "$TAB" "$REPORT_NAME" <fleet-id>
+```
+
+For a remote pane, the script must exist on that server (source checkout or installed skill). Run this
+**Bash** caller locally; `%q` encodes every dynamic argument into one remote command, so the script's own
+Python snippets never collide with an outer `ssh` quote:
+
+```bash
+REMOTE_FLEET_SHIP_DIR=/absolute/path/to/fleet-ship
+FLEET_ID=<fleet-id>
+remote_command=(bash "$REMOTE_FLEET_SHIP_DIR/scripts/verify-codex-launch.sh" "$N" "$WT" "$TAB" "$REPORT_NAME" "$FLEET_ID")
+ssh "$HOST" "$(printf '%q ' "${remote_command[@]}")"
+```
+
+Do not send more text until `BOOT_READY`; the argv brief is the first turn. A quickly completed argv brief
+may already be `idle` or `done`, which is valid proof and then follows the normal waiter contract. Headless
+alternative when no steering is needed: `codex exec --dangerously-bypass-approvals-and-sandbox "<brief>"`
 (no TUI, no modal; terminal status `done`; NOTE codex exec often skips final commit/signal steps - expect the
 waiter's READY_UNCOMMITTED path). Unquoted `-c key=value` overrides are a separate instant-death (TOML parse):
 always single-quote, e.g. `-c 'model_reasoning_effort="medium"'`.
@@ -237,10 +270,17 @@ recovers (close dead pane → re-spawn grok→codex→fable/opus in the same ins
 Error signatures (grep the tail case-insensitively - extend per engine):
 `out of credits|rate.?limit|429|403|5[0-9][0-9] (Bad Gateway|Internal|Service)|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found|No such file`
 
-`/tmp/herdr_monitor.sh` - sweeps ALL active fleet panes; state file diffs progress across sweeps:
+Use the tracked `scripts/monitor-tail.py` helper rather than copying terminal-UI regexes into monitor loops.
+It normalizes only known volatile Codex chrome: startup spinner elapsed time, `esc to interrupt`, and
+context-percentage footers. It preserves real commands, logs, model output, and errors. Its public regression
+check is `python3 scripts/test-monitor-tail.py` from this skill directory.
+
+`/tmp/herdr_monitor.sh` - sweeps ALL active fleet panes; state file diffs normalized progress across sweeps:
 ```sh
 STATE="${1:-/tmp/herdr_monitor_state}"; STALL_SWEEPS="${2:-4}"   # 4 sweeps × ~120s ≈ 8 min stuck-threshold
 MACHINE_SLUG="${MACHINE_SLUG:?export the fleetctl join machine slug}"
+NORMALIZER="${FLEET_SHIP_DIR:-}/scripts/monitor-tail.py"
+[ -f "$NORMALIZER" ] || { echo "ERRORED:monitor missing monitor-tail helper; set FLEET_SHIP_DIR as above"; exit 2; }
 # export NAMES="chunk-a chunk-b …" (your fleet's chunk ids) OR export FLEET_TAB=<fleet tab id> (filtered client-side; herdr agent list takes no flags) before running - scoping is mandatory
 SIG='out of credits|rate.?limit|429| 403 | 5[0-9][0-9] |ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found'
 touch "$STATE"
@@ -259,9 +299,10 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
       line=$(printf '%s' "$tail" | grep -Ei "$SIG" | tail -1)
       echo "ERRORED:$REPORT_NAME :: $line"; continue
     fi
-    # progress fingerprint: status + tail-hash + commits-beyond-main
+    # progress fingerprint: status + normalized-tail fingerprint + commits-beyond-main.
+    # A spinner that changes only elapsed time now remains unchanged; real output still changes it.
     c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
-    h=$(printf '%s' "$tail" | cksum | cut -d' ' -f1)
+    h=$(printf '%s' "$tail" | python3 "$NORMALIZER" fingerprint)
     fp="$st:$h:$c"
     prev=$(grep "^$N	" "$STATE" | cut -f2); cnt=$(grep "^$N	" "$STATE" | cut -f3); cnt=${cnt:-0}
     if [ "$fp" = "$prev" ]; then cnt=$((cnt+1)); else cnt=0; fi
@@ -272,11 +313,13 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
   sleep 120   # backpressure between sweeps (fine inside a background script - same as the waiter scripts above)
 done
 ```
-Any `ERRORED:` / `STUCK:` / `DEAD:` line the orchestrator sees on the background task's output → read that pane's tail,
-classify (real long compile vs frozen), and recover per Hard rules. `STALL_SWEEPS` guards a legit long suite: a pane
-running tests has a *changing* tail (hash moves → cnt resets); only an inert pane accumulates cnt. Tune the threshold up
-for repos with multi-minute compiles. NOTE: if the harness reaps this background shell (same risk as the waiters), fall
-back to a `ScheduleWakeup`-timed sweep that runs the loop body ONCE per orchestrator wake - kill-proof, less responsive.
+Any `ERRORED:` / `STUCK:` / `DEAD:` / `BOOT_HUNG:` line the orchestrator sees on the background task's output → read that
+pane's tail, classify (real long compile vs frozen), and recover per Hard rules. `STALL_SWEEPS` guards a legit long suite:
+a pane running tests has *meaningful changing* output (fingerprint moves → cnt resets); only an inert pane, including a
+timer-only boot spinner, accumulates cnt. Tune the threshold up for repos with multi-minute compiles. `BOOT_HUNG` is
+raised by the separate bounded spawn verifier, not by the waiter; preserve that pane and classify it before any recovery.
+NOTE: if the harness reaps this background shell (same risk as the waiters), fall back to a `ScheduleWakeup`-timed sweep
+that runs the loop body ONCE per orchestrator wake - kill-proof, less responsive.
 
 ## Read a pane (JSON → text)
 ```sh
