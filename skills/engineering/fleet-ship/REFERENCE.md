@@ -56,6 +56,14 @@ export FLEET_SHIP_DIR="$PWD/skills/engineering/fleet-ship"
 test -f "$FLEET_SHIP_DIR/scripts/monitor-tail.py" || { echo "fleet-ship scripts not found"; exit 2; }
 ```
 
+**Trust short-circuit (verified live 2026-07-21):** the modal only appears for an UNtrusted cwd.
+`~/.codex/config.toml` carries `[projects."<path>"] trust_level = "trusted"` entries, and trust is
+INHERITED by descendants - on a box where `$HOME` or `~/Projects` is trusted, every worktree under it
+boots straight into the argv turn with NO modal. `verify-codex-launch.sh` now detects this and skips
+the sleep+Enter entirely; the accept path below applies only to untrusted paths. Check with
+`rg -n -A1 '^\[projects\.' ~/.codex/config.toml`. Do NOT send a bare Enter "just in case" on a trusted
+pane - it lands on the prompt line, not a modal.
+
 **Codex pane launch protocol (verified live 2026-07-16 - REQUIRED, panes die otherwise):** codex TUI
 launched with `--dangerously-bypass-approvals-and-sandbox` boots into a Yes/No trust MODAL, and ANY text
 delivered while the modal is up (`agent send`, `pane send-text`) CRASHES the pane - this reads as "codex
@@ -69,9 +77,15 @@ auto-kills the pane.
 
 ```sh
 # Run this on the pane's server. The bundled command resolves monitor-tail.py beside itself.
+# Everything after <fleet-id> passes through to codex - ALWAYS hand it the lane's argv from
+# ~/.ax/fleet-routing.json, or the pane silently inherits ~/.codex/config.toml (which is
+# model_reasoning_effort="max" on this box - wasteful on clear-spec mechanical chunks).
 N=<chunk-id>; WT=<worktree>; TAB=<fleet-tab-id>; REPORT_NAME=<machine-slug>/<chunk-id>
-bash "$FLEET_SHIP_DIR/scripts/verify-codex-launch.sh" "$N" "$WT" "$TAB" "$REPORT_NAME" <fleet-id>
+bash "$FLEET_SHIP_DIR/scripts/verify-codex-launch.sh" "$N" "$WT" "$TAB" "$REPORT_NAME" <fleet-id> \
+  -c 'model_reasoning_effort="medium"'
 ```
+NOTE `--yolo` does NOT exist in codex-cli (checked 0.144.6) - the flag is
+`--dangerously-bypass-approvals-and-sandbox`.
 
 For a remote pane, the script must exist on that server (source checkout or installed skill). Run this
 **Bash** caller locally; `%q` encodes every dynamic argument into one remote command, so the script's own
