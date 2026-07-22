@@ -55,8 +55,13 @@ iOS bugs in `apps/lockin-chinese/ios` (LockInKit) or `packages/swift/AppFeedback
    `Device verification needed:` line naming exactly what a human should check on-device
    (tie it to the issue's Quote/Screen). Do NOT auto-merge unless the user opted into it.
 8. **TRACK + hand off.** Comment the PR link on the issue; swap the label `wip:fixing` ->
-   `pr-open`. Tear down the worktree (remove it + delete the local branch; the PR holds the
-   work). STOP - report the issue #, the PR #, and what you did in 2-3 lines.
+   `pr-open`. **UAT capture (repo convention - docs/playbooks/issue-labels.md):** if the fix
+   has a `Device verification needed:` line, ALSO add that check (a concrete `- [ ]` item +
+   PR pointer) to the open `uat`-labeled issue for the app's next build - extend the
+   existing one, or create it (`--label uat --label device-verify`) when none is open. That
+   issue is what the human aggregates at build time; a device-check ask buried only in a PR
+   body gets lost. Tear down the worktree (remove it + delete the local branch; the PR holds
+   the work). STOP - report the issue #, the PR #, and what you did in 2-3 lines.
 9. **If you cannot confidently fix it** (needs an on-device repro, a design/product call, or
    a Sentry stack you couldn't get): comment your findings + the exact blocker, add
    `needs-human`, remove `wip:fixing`, STOP. Never touch the same issue on a later
