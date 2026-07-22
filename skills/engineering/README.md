@@ -19,6 +19,7 @@ Reachable only when you type them (`disable-model-invocation: true`).
 
 Model- or user-reachable (rich trigger phrasing so the model can reach for them).
 
+- **[wrap-up](./wrap-up/SKILL.md)** — Close down a work session or agent pane: land or file everything of value (follow-up tickets), queue human checks on a `uat` checklist issue, safe-only housekeeping, then report closed/filed/kept.
 - **[diagnosing-bugs](./diagnosing-bugs/SKILL.md)** — Disciplined diagnosis loop for hard bugs and performance regressions: reproduce → minimise → hypothesise → instrument → fix → regression-test.
 - **[tdd](./tdd/SKILL.md)** — Test-driven development with a red-green-refactor loop. Builds features or fixes bugs one vertical slice at a time.
 - **[domain-modeling](./domain-modeling/SKILL.md)** — Actively build and sharpen a project's domain model — challenge terms, stress-test with scenarios, update `CONTEXT.md` and ADRs inline.

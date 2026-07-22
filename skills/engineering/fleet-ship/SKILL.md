@@ -112,6 +112,9 @@ you only honor a tag that arrives). The tag travels in the chunk's queue entry; 
 - **Finish:** `superpowers:verification-before-completion` (gates) → `superpowers:finishing-a-development-branch`
   (PR) → orchestrator merges → `commit` conventions.
 - **Dogfood:** `dogfood` (+ `verify` / `run` to launch the app).
+- **Wrap up the run:** `wrap-up` - run-end closure AFTER teardown-verify: follow-up tickets for every
+  unresolved REPORT.md concern and gate-waived finding, UAT checklist items for what shipped, safe-only
+  residue cleanup, closed/filed/kept report.
 
 Claude panes (fable/opus/sonnet) invoke these directly. **pigrok/codex panes lack the Skill tool → bake the discipline
 (plan-first, red→green TDD, gates) into their brief text.** The orchestrator (fable/opus) always owns Review + Finish.
@@ -494,6 +497,12 @@ tracked by exact path") extended to every herdr resource:
   `TEARDOWN-DONE <n closed>` to the ledger. Run it, don't hand-roll it:
   `scripts/fleet-teardown.sh <ledger> --epic <epic>` (dry-run), then add `--execute`.
   `fleetctl deregister` only AFTER teardown-verify.
+- **Run wrap-up LAST (invoke the `wrap-up` skill).** Teardown closes herdr resources; wrap-up closes the
+  RUN: one `follow-up`-labeled issue per unresolved concern in the run archive's REPORT sections (linked to
+  the chunk's PR), UAT checkboxes appended to the scope's open `uat` issue (TestFlight build numbers to
+  install, shipped flows to smoke on device, regressions to confirm dead - one live UAT issue per scope),
+  then the closed/filed/kept report into the run map's final comment. A fleet run is not done at
+  deregister - it is done when its loose ends are tickets and its human checks are queued.
 - **Exact ids only** — never pattern-match labels (`fleet:*`) to find things to close; concurrent
   fleets share the namespace (same live lesson as the worktree cleanup regex).
 - **Rotation-safe:** the handoff doc carries the open RES lines; the successor inherits the teardown
