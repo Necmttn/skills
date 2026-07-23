@@ -275,8 +275,9 @@ when the board is unreachable:
 - **Lifecycle vocabulary (spec-fixed 7 stages; the board rejects anything else):**
   `ASSIGNED → PLANNED → BUILT → IN_REVIEW → GATED → MERGED → DOGFOODED`. Emit with
   `bun ~/Projects/fleetboard/fleetctl.ts event <STAGE> --machine <slug> --chunk <chunk-id> --epic <epic>
-  --gist "<one-line>"` — auth is the machine token minted by `fleetctl join`; the event's chunk id is
-  machine-namespaced `<slug>/<chunk-id>`; a bad stage exits non-zero listing the valid stages.
+  --gist "<one-line>"` — auth is the machine token minted by `fleetctl join`; the chunk id is stored
+  BARE (`--machine` is what scopes it — never prefix the id itself, or reads and waiters filtering by the
+  bare id silently match nothing); a bad stage exits non-zero listing the valid stages.
 - **At fleet start** record the event cursor in the ledger (last `seq` from `fleetctl events --since 0`,
   or the cursor the ledger already holds) AND still set the fallback file
   `SIGNALS=/tmp/fleet-<epic>.signals` (one per run; note both in the ledger).
