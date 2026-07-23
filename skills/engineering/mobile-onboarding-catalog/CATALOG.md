@@ -1,6 +1,6 @@
 # Mobile Onboarding Catalog - Evidence
 
-Per-app onboarding entries, cited benchmark numbers, and the resource directory behind [SKILL.md](SKILL.md). Read this to justify a pattern, copy a specific move, or check a number against a source.
+Per-app onboarding entries, cited benchmark numbers, and the resource directory behind [SKILL.md](SKILL.md). Read this to justify a pattern, copy a specific move, or check a number against a source. For the *shape* of a specific screen, see [SCREENS.md](SCREENS.md).
 
 ## How to update this catalog
 
@@ -35,22 +35,22 @@ Maintenance rules:
 - **Quiz length:** short motivation/level intake, then a ~15-item lesson.
 - **Paywall:** freemium; no hard onboarding paywall, Super upsell comes later.
 - **Signup:** deliberately AFTER the first lesson (moving it there raised DAUs ~20%).
-- **Key moves:** motivation capture; the Investment Wager raised D7 retention +14%; late-night streak-saver notification.
+- **Key moves:** motivation capture; the Investment Wager raised D7 retention +14%; late-night streak-saver notification. Mobbin's 1,460-flow study counts **~60 screens before signup** (one of the longest flows of 986 apps) - and it still doesn't feel long, because a completed lesson sits in the middle.
 - **Patterns:** P1, P7, P10.
 - **Why it works:** delivers a completed lesson (real "magic") before asking for anything; the wager converts sunk streak into retention.
-- **Sources:** [Growth.Design - Duolingo User Retention](https://growth.design/case-studies/duolingo-user-retention).
-- **Verified:** 2026-07-16. **Confidence:** primary.
+- **Sources:** [Growth.Design - Duolingo User Retention](https://growth.design/case-studies/duolingo-user-retention), [Mobbin study](sources/mobbin-1460-onboarding-study.md).
+- **Verified:** 2026-07-22. **Confidence:** primary.
 
 ### Headspace (meditation)
 - **Flow:** experience level -> session length -> "what brought you to Headspace" (goal) -> recommended first session -> onboarding IS a ~2-min guided meditation (reachable in ~9-10 taps) -> post-session mood check -> account/paywall after value.
 - **Quiz length:** very short, 2-3 questions.
 - **Paywall:** after the first-session experience, usually with a free trial.
 - **Signup:** after try-it-first.
-- **Key moves:** self-segmentation on experience + goal makes the first session feel immediately relevant; articulating a goal raises motivation.
+- **Key moves:** self-segmentation on experience + goal makes the first session feel immediately relevant; articulating a goal raises motivation. Switching the goal question from single-pick to **multi-select lifted free-trial conversion +10%** (users arrive with more than one pain point) - per Mobbin's study.
 - **Patterns:** P2, P1.
 - **Why it works:** the core value (a real meditation) is experienced inside onboarding before any commitment.
-- **Sources:** [UserOnboard - How Headspace Onboards New Users](https://www.useronboard.com/how-headspace-onboards-new-users/), [Appcues GoodUX - Headspace's mindful onboarding](https://goodux.appcues.com/blog/headspaces-mindful-onboarding-sequence).
-- **Verified:** 2026-07-16. **Confidence:** strong-secondary.
+- **Sources:** [UserOnboard - How Headspace Onboards New Users](https://www.useronboard.com/how-headspace-onboards-new-users/), [Appcues GoodUX - Headspace's mindful onboarding](https://goodux.appcues.com/blog/headspaces-mindful-onboarding-sequence), [Mobbin study](sources/mobbin-1460-onboarding-study.md).
+- **Verified:** 2026-07-22. **Confidence:** strong-secondary.
 
 ### Calm (meditation)
 - **Flow:** opens by prompting a single deep breath (instant relief) -> "what are you looking for?" multi-select goals -> personalized feed shaped by answers -> ongoing mood check-ins -> account + paywall.
@@ -282,6 +282,15 @@ Numbers below are from the primary source that owns them. Edition/year tagged. H
 ### KYC / fintech onboarding friction
 - **70% of users abandon KYC flows longer than 3 minutes**; Revolut cut UK sign-up-to-verified from ~70 min to ~2 min - [GBG - Revolut case study](https://www.gbg.com/en/our-customers/revolut-v1/).
 
+### Mobbin 1,460-flow study (library composition, April 2026 snapshot)
+From [Mobbin's onboarding study video](https://www.youtube.com/watch?v=Qsq-Sj_rojU); dataset per its own data screens = **1,460 onboarding flows across 986 apps & websites**. Library counts, not A/B results. Full mining notes, caption-vs-frame name corrections, and 18 screen transcriptions: [sources/mobbin-1460-onboarding-study.md](sources/mobbin-1460-onboarding-study.md) and [SCREENS.md](SCREENS.md).
+- **Average onboarding screens by platform: iOS 26.5, Android 24.9, Web 21.0** - web runs 21% shorter than iOS because mobile carries the permission + paywall screens. Use these as the "is my flow long?" baseline; ~25 screens is normal, not bloat.
+- **Top 10 longest flows:** Hyundai Card, Lemonade Insurance, Monzo, Noom, Neo Financial, Kit, Philips Hue, Chase UK, Upwork, Mercury - **7 of 10 are finance**. Longest categories: finance, health & fitness, education. Several of the longest belong to the most successful apps.
+- **23% of apps personalize during onboarding; AI apps only 7%** (AI products let usage do the personalizing; 3 of the shortest flows are AI products).
+- **22% of apps/websites show a paywall during onboarding.**
+- Experiment results relayed in the video, with the tighter on-slide figures where they differ from the narration: Headspace single-pick -> multi-select goals **+10% trial conversion**; Dollar Shave Club conversational quiz copy **+5.24% subscriptions** (conversion.com); Grammarly quiz-tailored plan recommendation **10-20% more plan upgrades** (growth.design); Mural checklist-instead-of-popups **+10% relative 1-week retention** (insidergrowthhq.com); Houzz(?) multi-screen signup split **+15% conversions**. All are second-hand relays - go to the owning source before quoting any of them in a spec.
+- Culture caveat: Eastern-market users tolerate information-dense UI; density judgments don't transfer across markets.
+
 ### Numbers to verify before quoting (secondary-only)
 - D1/D7/D30 retention by category (e.g. consumer-social D1 40-50% / D7 20-30% / D30 10-15%; gaming D1 ~29-33%) - reached only via aggregators (MWM, Plotline), not the owning Amplitude/Adjust reports. The primary reports (Amplitude Product Benchmarks, Adjust benchmark tool) are gated/JS-driven.
 - RevenueCat per-category monthly-churn specifics (first-renewal 30-50% weekly / 15-40% monthly; ~10% of monthly payers reach year 2) - surfaced via search snippet attributed to the 2025 report, not confirmed on the fetched page (full churn tables are in the email-gated PDF).
@@ -293,7 +302,7 @@ Numbers below are from the primary source that owns them. Edition/year tagged. H
 Ongoing sources to mine. Format: what it is, cost, how to use it for onboarding study. All verified live 2026-07-16.
 
 ### Screenshot & flow libraries
-- **[Mobbin](https://mobbin.com)** - freemium (Starter ~$20/seat/mo; **Pro ~$40/mo adds user-flow recordings**). Deepest searchable library of real mobile/web screens organized into flows. Pro tier is the one for studying full onboarding sequences screen-by-screen.
+- **[Mobbin](https://mobbin.com)** - freemium (Starter ~$20/seat/mo; **Pro ~$40/mo adds user-flow recordings**). Deepest searchable library of real mobile/web screens organized into flows. Pro tier is the one for studying full onboarding sequences screen-by-screen. Their [YouTube channel](https://www.youtube.com/@mobbin) publishes data studies over the library - the 1,460-flow onboarding study is mined in [sources/mobbin-1460-onboarding-study.md](sources/mobbin-1460-onboarding-study.md); a dashboards study was announced as next. **Mining recipe:** `yt-dlp --write-auto-subs` for the transcript, then `ffmpeg -ss <t> -frames:v 1` at each app mention - the captions garble app names and the on-screen slides carry tighter numbers than the narration.
 - **[ScreensDesign](https://screensdesign.com)** - paid (~EUR 60/quarter). Video previews of iOS onboarding + paywall flows from ~1,500 top-grossing apps, tagged with revenue/conversion signals. Best source for the MOTION of a flow (question -> loading -> paywall). Filter by revenue to study only proven flows.
 - **[Page Flows](https://pageflows.com)** - paid (from $8.25/user/mo annual; $2.95 3-day trial). 79,000+ screens, 20,000+ apps, hundreds of recorded flow videos incl. a dedicated iOS onboarding section. Cheaper than Mobbin Pro for flow recordings.
 
