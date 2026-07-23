@@ -137,8 +137,10 @@ stray `:::`, stray `+1`, curly quotes where straight quotes belong (especially i
 2. Name the core point and 3-5 voice signals to preserve (vocabulary, cadence, bluntness,
    humor, uncertainty, digressions). Keep this note internal. Can't find the core point: ask.
 3. Detect request: return the findings report from Two jobs and stop.
-4. Edit request: make the minimum effective changes, then check the result against
-   `eval.md` in this skill directory yourself. No separate evaluator agent needed.
+4. Edit request: make the minimum effective changes, then Read
+   `~/.claude/skills/no-ai-slop/eval.md` and check the result against every item yourself.
+   No separate evaluator agent needed. If the file is unreadable, self-check against the
+   Editing principles and Patterns to cut sections above and say the eval file was missing.
 5. Any check fails: fix and re-run the checks.
 6. Output the full edited draft plus a short **What changed** section.
 
