@@ -26,7 +26,7 @@
       "engine": "opus",
       "argv": "claude --model opus --dangerously-skip-permissions",
       "enabled": true,
-      "reason": "deep-judgment lane; always pin --model",
+      "reason": "deep-judgment lane; opus alias resolves to Opus 5 (2026-07-29 resweep) - thinking on by default, review quality holds at low/medium effort; always pin --model",
       "origin": "default"
     },
     {
