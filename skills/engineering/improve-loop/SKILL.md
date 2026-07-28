@@ -15,11 +15,19 @@ then re-checks budget and picks the next. The plan is the product; the executor 
 2. **Existing /improve plans:** `plans/README.md` (or `advisor-plans/`) with TODO status - run
    `improve reconcile` first so you don't build stale plans.
 3. **Board cards:** the repo's kanban backlog column (apps repo: noktadev org project 2).
-4. **Fresh audit (sources 1-3 empty):** `improve quick` → vet → plan top 3 by leverage → those
-   become the queue. Never `deep` inside the loop - depth is a user decision.
+4. **Fresh audit - EXPLICIT OPT-IN ONLY:** run `improve quick` only when the user's invocation
+   pre-authorized it ("audit if the backlog is dry") or after asking. Sources 1-3 empty WITHOUT
+   that authorization = the loop is DONE - report dry and stop. Never `deep` inside the loop.
+   (Without this rule the loop manufactures its own fuel: reviews file follow-ups, follow-ups
+   are source #1, and "dry = done" can never fire.)
 
 Skip tickets that are: design-ambiguous (need the human - label them `needs-decision` and move
 on), device-verify-only, or blocked-by. The loop ships what is shippable unattended.
+
+**Fleet safety:** before any merge to main, check for a live fleet (fleetboard `/state`, fallback
+`docs/superpowers/fleet-runs/ACTIVE.md`). Fleet live → honor the `main-merge` claim exactly like a
+fleet orchestrator (claim → rebase → root gate → squash-merge → release), or stop at the open PR
+and let the fleet's queue land it. Never race a fleet to main.
 
 ## Per-ticket loop
 
@@ -33,8 +41,8 @@ on), device-verify-only, or blocked-by. The loop ships what is shippable unatten
 3. **Route** (fleet-ship's lane table, solo form):
    - mechanical / clear-spec → `codex exec` in the worktree via Bash (self-contained prompt,
      name the test framework: "vitest, import from 'vitest', never bun:test"), or a
-     `model:'sonnet', effort:'low'` Agent when codex is dry; grok CLI as the second lane when
-     several tickets run in parallel.
+     `model:'sonnet', effort:'low'` Agent when codex is dry. Strictly ONE ticket in flight -
+     this loop is serial; wanting parallel lanes IS the fleet-ship escalation signal below.
    - judgment / user-facing (taste ≥ 7) / reactor-subtle → do it yourself or `model:'opus'`.
    - NEVER stack "double-check your work" on a frontier executor; concrete gates only.
 4. **Gate** (you, never delegated): review the diff - cross-engine when codex/grok built it

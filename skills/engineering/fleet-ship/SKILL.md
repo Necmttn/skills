@@ -186,8 +186,8 @@ this skill; record which lane file version a run used in the ledger. Resolution 
 |---|---|---|
 | mechanical (clear spec, schema/validator/wiring, 1-3 files, migrations, data analysis) | **codex / gpt-5.5** `codex --dangerously-bypass-approvals-and-sandbox` **AND grok-4.5** `grok --always-approve` - TWO peer lanes; route each unblocked mechanical chunk to whichever has free capacity, run both in parallel when several chunks are unblocked | codex: effectively free, reads CLAUDE.md. grok: same brief discipline (no Skill tool - spell it out); escalation ladder grok/codex → fable/opus in the SAME worktree. Keep >1 lane funded |
 | burst overflow only (both mechanical lanes saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
-| judgment / reactor-subtle / security / hard-unsupervised | **fable-5** `claude --model fable --dangerously-skip-permissions` (fallback opus-5) | int 9; always pin `--model` |
-| user-facing: UI / copy / API design | **fable-5 or opus-5** (taste ≥ 7) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor |
+| judgment / reactor-subtle / security / hard-unsupervised | **opus-5** `claude --model opus --dangerously-skip-permissions` | matches the json's judgment lane; fable BUILDS nothing - scoping/planning/review only (user steer 2026-07-12, the json's frontier lane); always pin `--model` |
+| user-facing: UI / copy / API design | **opus-5** (taste 8) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor; fable reviews the result, never builds it |
 | review + gate + merge | orchestrator (fable-5 or opus-5) + `codex review` as extra independent perspective | never delegated |
 
 **Steering:** the user can override routing at ANY time with one sentence ("route all mechanical to codex",
@@ -408,7 +408,7 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    at the real seam*, e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears — NOT that a
    mocked dispatch was called) → gates (CONCRETE commands, named: `bun run typecheck` 0,
    `verify:effect` 0, suites green - never a meta "verify your work" line, see Opus-5-class alignment) →
-   **`git add -A && git commit` before STOP, then report as
+   **`git add -A ':!BRIEF.md' ':!REPORT.md' && git commit` before STOP, then report as
    `<slug>/<chunk-id>`; do NOT push/PR/merge** (uncommitted worktree = UNFINISHED to the waiter). Claude
    panes get the skill NAMES (they
    have the Skill tool); codex/pi panes get the non-Claude variant with the discipline spelled out as text.
@@ -435,7 +435,7 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    treat the wait command's exit code as completion. AND ensure the fleet **liveness monitor** loop is
    running (it sweeps this pane for stuck/errored/dead).
 6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane (its commit+report already emitted `BUILT` via the SIGNAL STEP; on READY_UNCOMMITTED you commit the pane's work and emit `BUILT` yourself), then three passes before your judgment:
-   a. **Cross-engine review** (dispatching it = emit `IN_REVIEW`)**:** the chunk's diff is reviewed by the OTHER mechanical engine (codex-built chunk → grok review; grok-built → `codex review`). Reviewer gets plan section + diff; hunts correctness bugs + plan deviations. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
+   a. **Cross-engine review** (dispatching it = emit `IN_REVIEW`)**:** the chunk's diff is reviewed by a DIFFERENT engine than built it - grok-built → `codex review`; codex-built → fable/opus adversarial review (grok is BUILD-only, it stalls on review workloads - the model-table rule, now consistent here). Reviewer instruction: report EVERY concrete finding with evidence, no severity self-filtering - the orchestrator triages. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
    b. **Reuse/simplicity pass** on the same diff (either engine or fable): hand-rolled code that a shared package / the repo's package index already owns = must-fix; needless complexity = should-fix.
    c. `/review-all` → **seam check** (the
    `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not

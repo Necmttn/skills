@@ -143,6 +143,9 @@ machine+user (once per fleet run, ledger-cached):
   have "followed along" without plan/TDD/verification gates - output looked compliant, wasn't.
 
 ### Discipline block - Claude panes (fable/opus/sonnet; they have the Skill tool - name the skills)
+> SCOPE PIN: deliver exactly what the chunk spec asks, at the scope intended; if a better approach or an
+> adjacent improvement exists, note it in ONE sentence in REPORT.md and continue as briefed - never widen,
+> narrow, or transform the chunk.
 > WORKFLOW (mandatory): FIRST invoke superpowers:writing-plans and write a short plan (decompose into tasks,
 > name files+tests, sequence). THEN build with superpowers:subagent-driven-development - strict TDD per task,
 > failing test FIRST (red), then green, then refactor. SEAM RULE (superpowers testing-anti-patterns.md): mock
@@ -157,8 +160,10 @@ machine+user (once per fleet run, ledger-cached):
 > uncommitted work at risk). Run gates FROM the worktree too (a gate run from the main checkout silently
 > tests the wrong tree). GATES before done (concrete commands only - the verification meta-skill is retired): <repo gates,
 > e.g. bun run typecheck 0, bun run verify:effect 0, named suites green - capture tsc's REAL exit code, never
-> pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run git add -A && git commit
-> (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report as
+> pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run
+> git add -A ':!BRIEF.md' ':!REPORT.md' && git commit
+> (one conventional commit; worktree-root scratch files never ship - and an uncommitted worktree is treated
+> as UNFINISHED), STOP and report as
 > `<report-name>`: commit SHA + test summary + concerns. Do NOT pause to ask how to finish; do NOT push,
 > open a PR, or merge - the orchestrator owns review + merge. SIGNAL STEP (mandatory, LAST, even on failure):
 > emit the lifecycle event - on DONE (work committed) run `bun ~/Projects/fleetboard/fleetctl.ts event
@@ -171,6 +176,9 @@ machine+user (once per fleet run, ledger-cached):
 > without signaling means the orchestrator may never see your result.
 
 ### Discipline block - non-Claude panes (codex/pi; no Skill tool - same discipline spelled out)
+> SCOPE PIN: deliver exactly what the chunk spec asks, at the scope intended; if a better approach or an
+> adjacent improvement exists, note it in ONE sentence in REPORT.md and continue as briefed - never widen,
+> narrow, or transform the chunk.
 > WORKFLOW (mandatory): FIRST write a short plan before touching code (decompose into tasks, name files+tests,
 > sequence). THEN strict TDD per task: write the failing test FIRST (<repo test framework note, e.g. vitest -
 > import from "vitest", NO bun:test, no toStartWith>), run it and see it fail, make it pass, refactor. SEAM
@@ -179,8 +187,9 @@ machine+user (once per fleet run, ledger-cached):
 > called (if the test still passes with the mock removed, it tests nothing). Read CLAUDE.md for repo
 > conventions. WORKTREE GUARD: work ONLY in this worktree; never cd to or commit in the primary checkout;
 > run gates from the worktree. GATES before done: <repo gates, real exit codes - never pipe tsc through
-> tail/grep before checking $?>. Then run git add -A && git commit (one conventional commit;
-> an uncommitted worktree is treated as UNFINISHED), STOP and report as `<report-name>`: commit SHA + test
+> tail/grep before checking $?>. Then run git add -A ':!BRIEF.md' ':!REPORT.md' && git commit (one
+> conventional commit; worktree-root scratch never ships - and an uncommitted worktree is treated as
+> UNFINISHED), STOP and report as `<report-name>`: commit SHA + test
 > summary + concerns.
 > Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge. SIGNAL
 > STEP (mandatory, LAST, even on failure): emit the lifecycle event - on DONE (work committed) run
@@ -240,7 +249,7 @@ further commit.)
 **Refinement (canonical build waiter): commit-gate fires on the FIRST commit — but a pane doing logical/incremental commits (task-by-task) isn't done at commit #1.** Require BOTH stable terminal status (two `agent get` polls accepting explicit `idle|done`, separated by a settle) AND `>=1` commit: `wait idle (exit ignored) → poll status → settle → poll status && commits>0 → DONE`. Live lesson: a multi-task G0 pane committed Task 1 then kept working; the bare commit-gate merged mid-chunk.
 
 **Refinement 2 (LIVE define_view run — three failures the commit-only gate can't see):**
-1. **A build pane can finish gated-green but NOT `git commit`.** Codex is *inconsistent*: same brief, some chunks committed, one finished with work staged/modified but uncommitted -> `rev-list origin/main..HEAD` empty forever -> waiter spins to TIMEOUT (~silent 30-40 min), orchestrator never advances. SAME failure as a dogfood pane leaving work uncommitted -- NOT dogfood-specific. **Gate build panes on stable-idle AND (commit OR dirty-working-tree)**: `dirty=$(git -C "$WT" status --porcelain)`. Emit a DISTINCT signal -- `READY` (committed) vs `READY_UNCOMMITTED` (idle+dirty); on the latter the orchestrator commits the pane's work ITSELF (`git add -A && git commit`) before gating. Belt: every brief must say *"run `git add -A && git commit` before you stop -- an uncommitted worktree is treated as UNFINISHED."*
+1. **A build pane can finish gated-green but NOT `git commit`.** Codex is *inconsistent*: same brief, some chunks committed, one finished with work staged/modified but uncommitted -> `rev-list origin/main..HEAD` empty forever -> waiter spins to TIMEOUT (~silent 30-40 min), orchestrator never advances. SAME failure as a dogfood pane leaving work uncommitted -- NOT dogfood-specific. **Gate build panes on stable-idle AND (commit OR dirty-working-tree)**: `dirty=$(git -C "$WT" status --porcelain)`. Emit a DISTINCT signal -- `READY` (committed) vs `READY_UNCOMMITTED` (idle+dirty); on the latter the orchestrator commits the pane's work ITSELF (`git add -A ':!BRIEF.md' ':!REPORT.md' && git commit`) before gating. Belt: every brief must say *"run `git add -A ':!BRIEF.md' ':!REPORT.md' && git commit` before you stop -- an uncommitted worktree is treated as UNFINISHED."*
 2. **Panes finish in status `done`, not `idle`.** Codex ends a chunk in `agent_status: done` (terminal), so a waiter gating on `= idle` only loops past a finished pane to TIMEOUT. ALWAYS accept `idle|done` (build AND dogfood waiters).
 3. **Wait trap (verified live): `herdr agent wait --status idle` is LEVEL-triggered and only a backpressure hint.** Against a real `done` pane it resolves in ~10ms but exits 1, while its payload's `agent_status` remains `done`; ignore that exit code and poll `herdr agent get`, accepting `idle|done`. Never pass `--status done` to `herdr agent wait` — it is hard-rejected. When `done` must be a first-class wait target, resolve the pane id with `agent get` and use `herdr wait agent-status <pane_id> --status done`. herdr has **no native turn-finished event/webhook**; the only true edge-trigger is `herdr wait output <pane_id> --match <sentinel> --regex` (blocks for NEW output; pane-id ONLY — names rejected, resolve via `agent get <name>`) -- optional fast-path if the pane echoes a sentinel last. Otherwise the git-state gate (commit OR dirty) is the authority.
 
