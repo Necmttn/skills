@@ -1,11 +1,11 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-4.8), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
 ---
 
 # Fleet Ship - parallel herdr orchestration
 
-You are the **orchestrator** (run on fable-5 or opus-4.8). Panes do the building; you plan the waves, route engines,
+You are the **orchestrator** (run on fable-5 or opus-5). Panes do the building; you plan the waves, route engines,
 gate reviews, merge, track on a kanban, and dogfood. This skill *composes* our normal ship workflow -
 it just runs it across many parallel herdr panes instead of one session.
 
@@ -129,8 +129,8 @@ Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX,
 | gpt-5.5 | 9 | 8 | 5 | Codex CLI ONLY - `codex exec` / `codex review` (`~/.codex/config.toml` defaults to gpt-5.5); herdr pane = codex argv below |
 | grok-4.5 | 8 | 7 | 4 | grok CLI - `grok --always-approve` (`-m` to pin model); second mechanical lane, peer of codex (2026-07-10). **BUILD lane only - grok STALLS on review workloads (live 2026-07-10): never route reviews to grok.** Cross-engine review of grok-built work → codex; review of codex-built work → fable/opus adversarial (not grok) |
 | sonnet-5 | 5 | 5 | 7 | `claude --model sonnet` / Agent `model:'sonnet'` |
-| opus-4.8 | 4 | 7 | 8 | `claude --model opus` / Agent `model:'opus'` |
-| fable-5 | 2 | 9 | 9 | `claude --model fable` / Agent `model:'fable'` |
+| opus-5 | 3 | 8 | 8 | `claude --model opus` / Agent `model:'opus'` - the alias resolves to Opus 5 now (2026-07-29 resweep); thinking ON by default, disable-thinking capped at effort `high` - lower effort instead of disabling thinking; review quality holds at low/medium effort (Opus-5 doc) |
+| fable-5 | 2 | 9 | 9 | `claude --model fable` / Agent `model:'fable'` - Mythos-class tier above Opus; same routing role as before |
 
 **How to apply (defaults, NOT limits):**
 - **Standing permission to escalate:** cheaper model's output doesn't meet the bar / fails the gate ->
@@ -138,8 +138,8 @@ Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX,
   not the price tag. Escalating costs less than shipping mediocre work.
 - **Cost is a tie-breaker only.** Anything that ships: **intelligence > taste > cost**.
 - **Bulk/mechanical** (clear-spec implementation, data analysis, migrations) -> gpt-5.5, effectively free.
-- **User-facing** (UI, copy, API design) needs **taste >= 7** -> sonnet-5/opus-4.8/fable-5, never gpt-5.5 solo.
-- **Reviews of plans/implementations** -> fable-5 or opus-4.8, optionally gpt-5.5 (`codex review`) as an
+- **User-facing** (UI, copy, API design) needs **taste >= 7** -> sonnet-5/opus-5/fable-5, never gpt-5.5 solo.
+- **Reviews of plans/implementations** -> fable-5 or opus-5, optionally gpt-5.5 (`codex review`) as an
   extra independent perspective (`/review-all` already includes it).
 - **Subagent dispatches (Agent tool) - classify EVERY dispatch before sending, then the model field follows
   (REQUIRED SUB-SKILL: `efficient-dispatch`).** A bare dispatch silently inherits the caller's model - from
@@ -186,9 +186,9 @@ this skill; record which lane file version a run used in the ledger. Resolution 
 |---|---|---|
 | mechanical (clear spec, schema/validator/wiring, 1-3 files, migrations, data analysis) | **codex / gpt-5.5** `codex --dangerously-bypass-approvals-and-sandbox` **AND grok-4.5** `grok --always-approve` - TWO peer lanes; route each unblocked mechanical chunk to whichever has free capacity, run both in parallel when several chunks are unblocked | codex: effectively free, reads CLAUDE.md. grok: same brief discipline (no Skill tool - spell it out); escalation ladder grok/codex → fable/opus in the SAME worktree. Keep >1 lane funded |
 | burst overflow only (both mechanical lanes saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
-| judgment / reactor-subtle / security / hard-unsupervised | **fable-5** `claude --model fable --dangerously-skip-permissions` (fallback opus-4.8) | int 9; always pin `--model` |
-| user-facing: UI / copy / API design | **fable-5 or opus-4.8** (taste ≥ 7) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor |
-| review + gate + merge | orchestrator (fable-5 or opus-4.8) + `codex review` as extra independent perspective | never delegated |
+| judgment / reactor-subtle / security / hard-unsupervised | **fable-5** `claude --model fable --dangerously-skip-permissions` (fallback opus-5) | int 9; always pin `--model` |
+| user-facing: UI / copy / API design | **fable-5 or opus-5** (taste ≥ 7) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor |
+| review + gate + merge | orchestrator (fable-5 or opus-5) + `codex review` as extra independent perspective | never delegated |
 
 **Steering:** the user can override routing at ANY time with one sentence ("route all mechanical to codex",
 "no pigrok this run", "everything on opus tonight"). Apply it for the remainder of the run, write the active
@@ -452,7 +452,7 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    on main → LOCAL repo-root gate → squash-merge → emit `MERGED` → release); never merge outside it.
 7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. Append the chunk\u2019s decision line to the run map (see Run map). **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. **UAT capture (2026-07-22, user rule - repo contract in docs/playbooks/issue-labels.md):** any merged chunk whose behavior only a human on a real device/TestFlight build can confirm (widgets, Live Activities, push, entitlements, purchase flows, camera/mic, background modes, anything the dogfood pane cannot prove in sim) -> add concrete `- [ ]` verification steps + the PR link to the app's open `uat`-labeled issue, or create one (`--label uat --label device-verify`) when none is open; ONE `uat` issue per app per build window, extended not duplicated. The pre-ship human sweep is `gh issue list --label uat --state open` - a device-check ask that is not on a `uat` issue does not exist at build time. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
 8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
-   **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-4.8 for reactor-subtle merges;
+   **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-5 for reactor-subtle merges;
    never fable - scoping/planning/review only per the 2026-07-12 steer): run the app, exercise the chunk's new
    behavior + a core smoke, report → findings become **new kanban cards** linked to the chunk. Tracer
    report received → emit `DOGFOODED` (the chunk's final lifecycle stage).

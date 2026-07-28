@@ -62,7 +62,7 @@
       "engine": "opus",
       "argv": "claude --model opus --settings '{\"fastMode\": true}' --dangerously-skip-permissions",
       "enabled": true,
-      "reason": "Claude fast mode via --settings flagSettings (no --fast CLI flag exists); opus 4.8/4.7 only - no effect on fable/sonnet; billed higher while active; org allowlist + overage/cooldown can silently drop it",
+      "reason": "Claude fast mode via --settings flagSettings (no --fast CLI flag exists); opus 5/4.8/4.7 - no effect on fable/sonnet; billed higher while active; org allowlist + overage/cooldown can silently drop it",
       "origin": "user 2026-07-02: add fast-lane variants"
     },
     {

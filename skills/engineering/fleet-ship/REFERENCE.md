@@ -107,7 +107,7 @@ always single-quote, e.g. `-c 'model_reasoning_effort="medium"'`.
 
 **Fast-lane mechanics (verified live 2026-07-02):**
 - **Claude:** NO `--fast` CLI flag exists. Launch opt-in = `--settings '{"fastMode": true}'` (the `flagSettings`
-  source is the exact check in the binary, and the only path that works headless/SDK). Opus 4.8/4.7 only —
+  source is the exact check in the binary, and the only path that works headless/SDK). Opus 5/4.8/4.7 only —
   no effect on fable/sonnet panes. Org allowlist + overage/cooldown can silently drop fast mode mid-run.
   In-session toggle: `/fast`. Kill-switch env: `CLAUDE_CODE_DISABLE_FAST_MODE`.
 - **Codex fast mode:** persistent form is `service_tier = "fast"` + `[features] fast_mode = true` in
