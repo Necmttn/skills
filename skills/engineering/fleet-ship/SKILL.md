@@ -109,8 +109,11 @@ you only honor a tag that arrives). The tag travels in the chunk's queue entry; 
 - **Route dispatches:** `efficient-dispatch` - every Agent-tool dispatch (orchestrator or Claude pane) is
   classified mechanical-vs-judgment and mechanical ones carry an explicit cheap `model:`; `ax dispatches`
   measures the inherit rate afterwards.
-- **Finish:** `superpowers:verification-before-completion` (gates) → `superpowers:finishing-a-development-branch`
-  (PR) → orchestrator merges → `commit` conventions.
+- **Finish:** run the repo's CONCRETE gates by name (`bun run typecheck` 0, `verify:effect` 0, suites green)
+  → `superpowers:finishing-a-development-branch` (PR) → orchestrator merges → `commit` conventions.
+  (`superpowers:verification-before-completion` DISABLED 2026-07-29 per the Opus-5 prompting doc - frontier
+  panes self-verify; a brief naming a disabled skill silently degrades to prose. Concrete gate commands
+  stay in every brief; the meta "verify before claiming done" ceremony does not.)
 - **Dogfood:** `dogfood` (+ `verify` / `run` to launch the app).
 - **Wrap up the run:** `wrap-up` - run-end closure AFTER teardown-verify: follow-up tickets for every
   unresolved REPORT.md concern and gate-waived finding, UAT checklist items for what shipped, safe-only
@@ -152,6 +155,25 @@ Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX,
   agent `model:'sonnet', effort:'low'` whose prompt writes a self-contained codex prompt, runs `codex exec`
   via Bash, and returns the result; investigation/data-analysis -> `codex exec -s read-only` with a
   self-contained prompt. In herdr panes skip the wrapper - spawn the codex CLI directly.
+
+**Opus-5-class alignment (2026-07-29, from the "Prompting Claude Opus 5" platform doc - applies to fable-5
+and opus-5+ panes/dispatches):**
+- **Effort is the primary cost lever on Claude dispatches:** mechanical Agent dispatches carry
+  `effort:'low'` alongside `model:'sonnet'`; step up only when the gate fails. Doc: low/medium hold quality
+  at a fraction of the tokens - mirror of the codex lanes' pinned `model_reasoning_effort="medium"`.
+- **Review briefs never say "be conservative" / "only report high-severity" / "must-fix only":** an
+  Opus-5-class reviewer follows that literally and under-reports. Reviewers report EVERYTHING; severity
+  filtering is the orchestrator's triage pass, not the reviewer's self-censorship. (The gate's
+  must-fix/should-fix tiers are triage labels applied AFTER full reporting - keep them there.)
+- **No stacked self-verification on frontier panes:** fable/opus panes self-verify and self-correct; do not
+  add "double-check your work" / "re-verify before responding" / verify-with-a-subagent ceremony to their
+  briefs - it compounds with native behavior and burns tokens for nothing. Concrete repo gates (typecheck,
+  vitest, verify:effect) are task spec, not ceremony - those stay. Codex/grok/sonnet briefs KEEP the
+  spelled-out discipline; this relaxation is frontier-Claude-only. Cross-ENGINE review (consensus gate,
+  tandem) is diversity, not re-verification - unchanged.
+- **Scope pin in every brief:** one line - "deliver what the chunk spec asks, at the scope intended; note a
+  better approach in REPORT.md in one sentence rather than widening the chunk." Opus-5-class panes expand
+  scope readily; unscoped improvements become review noise and merge risk.
 
 ## Engine routing (default policy — USER-STEERABLE via ~/.ax/fleet-routing.json)
 **At fleet start (and on any steering sentence), read `~/.ax/fleet-routing.json`** — the ax-idiom lane table
@@ -384,8 +406,9 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    PLAN first (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) →
    seam rule (point at `testing-anti-patterns.md`; a behavior-bearing chunk asserts the *observable effect
    at the real seam*, e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears — NOT that a
-   mocked dispatch was called) → gates (`superpowers:verification-before-completion`: `bun run typecheck` 0,
-   `verify:effect` 0, suites green) → **`git add -A && git commit` before STOP, then report as
+   mocked dispatch was called) → gates (CONCRETE commands, named: `bun run typecheck` 0,
+   `verify:effect` 0, suites green - never a meta "verify your work" line, see Opus-5-class alignment) →
+   **`git add -A && git commit` before STOP, then report as
    `<slug>/<chunk-id>`; do NOT push/PR/merge** (uncommitted worktree = UNFINISHED to the waiter). Claude
    panes get the skill NAMES (they
    have the Skill tool); codex/pi panes get the non-Claude variant with the discipline spelled out as text.

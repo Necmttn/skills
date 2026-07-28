@@ -155,7 +155,7 @@ machine+user (once per fleet run, ledger-cached):
 > (pwd must match it before any git command); NEVER cd to or commit in the primary checkout - two live
 > incidents (2026-07-04/05) had task subagents commit to main's checkout (recovered by cherry-pick + reset,
 > uncommitted work at risk). Run gates FROM the worktree too (a gate run from the main checkout silently
-> tests the wrong tree). GATES before done (superpowers:verification-before-completion): <repo gates,
+> tests the wrong tree). GATES before done (concrete commands only - the verification meta-skill is retired): <repo gates,
 > e.g. bun run typecheck 0, bun run verify:effect 0, named suites green - capture tsc's REAL exit code, never
 > pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run git add -A && git commit
 > (one conventional commit; an uncommitted worktree is treated as UNFINISHED), STOP and report as
