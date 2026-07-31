@@ -1,11 +1,11 @@
 ---
 name: ux-psychology
-description: Apply twelve cognitive-bias patterns (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring, effort justification, identity labeling, ego-driven sharing, Zeigarnik chunking, active learning, familiarity) when designing or critiquing UI. Use when generating or reviewing forms, onboarding flows, multi-step wizards, signup/auth walls, paywalls, pricing tables, upsells, progress indicators, retention screens, result reveals, profile/archetype screens, share cards, referral loops, tutorials, feature tours, or first-run setup - or when the user asks for a UX critique, conversion optimization, retention mechanics, viral loops, onboarding drop-off fixes, or to "make this screen convert better".
+description: Apply fourteen cognitive-bias patterns (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring, effort justification, identity labeling, ego-driven sharing, Zeigarnik chunking, active learning, familiarity, trial risk-reversal, earned rewards) when designing or critiquing UI. Use when generating or reviewing forms, onboarding flows, multi-step wizards, signup/auth walls, paywalls, pricing tables, upsells, progress indicators, retention screens, result reveals, profile/archetype screens, share cards, referral loops, tutorials, feature tours, or first-run setup - or when the user asks for a UX critique, conversion optimization, retention mechanics, viral loops, onboarding drop-off fixes, or to "make this screen convert better".
 ---
 
 # UX Psychology
 
-Twelve cognitive-bias rules for generating or critiquing UI. Rules 1-6 drive conversion on a single screen; rules 7-9 drive retention and acquisition across the product; rules 10-12 drive onboarding completion (most apps lose ~77% of users in the first 3 days - these are the counter). Each rule fires on a trigger surface - when the UI you're building or reviewing matches a trigger, apply that rule. For the psychology, evidence, and worked app examples behind each rule, see [REFERENCE.md](REFERENCE.md).
+Fourteen cognitive-bias rules for generating or critiquing UI. Rules 1-6 drive conversion on a single screen; rules 7-9 drive retention and acquisition across the product; rules 10-12 drive onboarding completion (most apps lose ~77% of users in the first 3 days - these are the counter); rules 13-14 drive paywall and discount conversion specifically. Each rule fires on a trigger surface - when the UI you're building or reviewing matches a trigger, apply that rule. For the psychology, evidence, and worked app examples behind each rule, see [REFERENCE.md](REFERENCE.md).
 
 ## Rules
 
@@ -76,6 +76,18 @@ Twelve cognitive-bias rules for generating or critiquing UI. Rules 1-6 drive con
 - **Trigger:** app settings, workspace setup, profile creation, first-run defaults.
 - **Action:** surface 1-3 high-impact preferences (voice, theme, layout density, core metric) immediately on entry, and re-render the UI live as each is chosen - the user must *feel* the impact (Speechify: pick voice, speed, highlight style before anything else). Like adjusting seat and mirrors in a new car: small controls make the product feel safe and theirs.
 - **Distinct from rule 4:** IKEA is about sunk investment raising exit cost; familiarity is about comfort and trust raising engagement. Both fire in FTUE - the preference-picking *is* the first investment.
+
+### 13. Trial Risk-Reversal - kill trial anxiety
+
+- **Trigger:** free-trial paywalls, trial product cards, subscription onboarding flows.
+- **Action:** the enemy is "I must remember to cancel" math, not price. Repeat the free/risk-free framing 5-7 times across the flow (once in a headline and once on the CTA is not enough); promise a reminder before the trial ends ("We'll remind you 2 days before") and actually send it; show a timeline block (today -> reminder day -> trial ends) instead of naming the trial length on the product card. Offer control: a "skip free trial" toggle with a slightly cheaper no-trial price captures ~10% direct purchases and makes the trial path feel chosen, not imposed.
+- **Copy:** label the trial plan by what the user gets ("Try it free"), never by billing period ("Yearly - $59.99"); billing detail goes in a subordinate line.
+
+### 14. Earned Rewards - discounts feel valuable when won
+
+- **Trigger:** discount offers, win-back screens, transaction-abandonment rescues, second-session offers.
+- **Action:** never hand a discount flat. Stage a claim moment - a spin, reveal, or unlock the user triggers - then frame the discount as theirs to claim ("You won 80% off - claim it"). Earned framing yields double-digit uplift over presenting the identical discount directly. Borrowed from e-commerce (wheel popups); adapt the mechanic to brand register, the active ingredient is the earned-then-claimed sequence, not the wheel.
+- **Constraint:** the "win" must be certain and identical for every user shown the mechanic; fake odds or variable outcomes cross into manipulation (see Ethical boundary).
 
 ## Critique workflow
 
