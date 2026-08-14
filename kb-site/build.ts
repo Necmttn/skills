@@ -79,6 +79,8 @@ const SECTIONS: Section[] = [
       { id: "ship-lockin-launch", title: "Lock In Chinese launch checklist", path: join(APPS_REPO, "apps/lockin-chinese/docs/LAUNCH_CHECKLIST.md") },
       { id: "ship-lockin-state", title: "Lock In Chinese submission state", path: join(APPS_REPO, "apps/lockin-chinese/docs/APP_STORE_SUBMISSION.md") },
       { id: "ship-lang-readiness", title: "Language-app launch readiness", path: join(PLAYBOOKS, "lockin-language-launch-readiness.md") },
+      { id: "ship-new-app", title: "New-app playbook (template kit)", path: join(PLAYBOOKS, "new-app.md") },
+      { id: "ship-asc-bootstrap", title: "ASC bootstrap recipes", path: join(PLAYBOOKS, "asc-bootstrap.md") },
     ],
   },
   {
