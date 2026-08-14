@@ -96,7 +96,7 @@ you only honor a tag that arrives). The tag travels in the chunk's queue entry; 
      `GATED`.
 
 ## Skills this composes (the chain - invoke these, don't reinvent)
-- **Drive panes:** `herdr-agent-orchestration` (read FIRST - `agent list/read/send/wait`, `pane send-keys`, `agent start`).
+- **Drive panes:** `herdr-agent-orchestration` (read FIRST - `agent list/read/prompt/wait`, `pane send-keys/wait-output`, `agent start --kind --pane`).
 - **Plan:** mechanical chunks → `superpowers:writing-plans` only. Design/ambiguous chunks in *autonomous*
   fleet mode → **parallel design-exploration** (`superpowers:dispatching-parallel-agents` / `design-an-interface`:
   N independent *lens* subagents → 1 synthesizer → an options doc + recommendation, **marked AWAITING-DECISION**).
@@ -266,7 +266,8 @@ local herdr names/labels bare, but write `<slug>/<chunk-id>` on every surface th
 ## Tandem orchestrator — codex co-pilot watching the fable orchestrator
 For autonomous/overnight runs (default on; skip for short attended runs), spawn ONE codex pane at max
 reasoning alongside the orchestrator as a second pair of frontier eyes:
-`herdr agent start tandem:<epic> --tab <orchestrator-tab> -- codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort="max"`
+`herdr pane split <orchestrator-pane> --direction down --no-focus` → `herdr agent start tandem:<epic>
+--kind codex --pane <new-pane> -- --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort="max"`
 (pane label `tandem:<epic>`; brief template in REFERENCE.md).
 - **Watchdog over the orchestrator itself** (~10 min cadence): read the orchestrator pane tail + ledger +
   `herdr agent list`; catch starvation (no wake progress), context bloat past the rotation threshold,
@@ -274,16 +275,17 @@ reasoning alongside the orchestrator as a second pair of frontier eyes:
   stuck; parked-draft submit protocol; 2 same-cause blocked cycles = incident, ring the bell.
 - **Rotation trigger-holder (skills#2):** tandem computes the rotation triggers EXTERNALLY — the
   orchestrator's own judgment degrades exactly when its window fills, so it never self-reports. Each sweep:
-  grep the orchestrator pane's visible bottom lines for the context indicator (Claude Code prints
-  "% ... auto-compact" / "context left" once the window fills); read the ledger's last rotation stamp for
-  the 4-6h wall-clock ceiling. On ANY trigger: send the orchestrator the ONE atomic instruction — "ROTATE
+  read `herdr agent get <orchestrator> | jq .result.agent.tokens.context` - the structured context-fill
+  field (see Herdr backchannel primitives; fall back to grepping the pane's bottom lines for
+  "% ... auto-compact" / "context left" only if the field is empty); read the ledger's last rotation stamp
+  for the 4-6h wall-clock ceiling. On ANY trigger: send the orchestrator the ONE atomic instruction — "ROTATE
   NOW: write the handoff doc (REFERENCE schema), commit it, park with an empty prompt" — and ring the bell
   if it hasn't parked within 2 sweeps (2 same-cause blocked cycles = incident).
 - **Judgment assist:** the orchestrator sends `TANDEM-JUDGE: <question> + pointers (plan section, diff
   paths, both reviews)` for gate tiebreaks, risky merges, ambiguous designs; tandem returns a terse verdict
   + reasoning. ADVISORY ONLY — the orchestrator still owns review+gate+merge (never delegated).
 - **Boundaries:** tandem is read-only on the repo — it never edits, merges, spawns, or kills panes; its only
-  outputs are `agent send` to the orchestrator and the bell. It is a fleet-spawned pane: archive-then-close
+  outputs are `agent prompt` to the orchestrator and the bell. It is a fleet-spawned pane: archive-then-close
   at run end like every other.
 
 ## Child→parent lifecycle events — panes PUSH on stop; the signals file is only the offline fallback
@@ -306,7 +308,9 @@ when the board is unreachable:
 - **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR
   errored — the pane pushes its lifecycle event: DONE (work committed) →
   `fleetctl event BUILT --machine <slug> --chunk <chunk-id> --gist "<gist>"`; BLOCKED/ERROR have no
-  lifecycle stage → ring `fleetctl attn <fleet-id> "<slug>/<chunk-id> BLOCKED|ERROR: <gist>"` and put the
+  lifecycle stage → ring `fleetctl attn <fleet-id> "<slug>/<chunk-id> BLOCKED|ERROR: <gist>"` PLUS the
+  in-herdr toast `herdr notification show "<slug>/<chunk-id> BLOCKED" --sound request` (works from any
+  pane - see Herdr backchannel primitives), and put the
   detail (what's wrong, what you need) in REPORT.md at the worktree root. FALLBACK only when the board is
   unreachable (the fleetctl command exits non-zero): append one line
   `date-time <machine-slug>/<chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS. A pane that can
@@ -324,6 +328,42 @@ when the board is unreachable:
 - Events COMPLEMENT the two spines: waiter = fast wake on done; monitor = liveness; the **event log = the
   durable truth** that survives both dying ($SIGNALS is only its offline shadow). A chunk may only be
   considered lost if all of these are silent AND the worktree shows no commits.
+
+### Herdr backchannel primitives - 0.8.0 delta (probed live 2026-08-15; protocol 19)
+Herdr 0.8.0 renamed the driving surface and added real child→parent primitives. Old commands in briefs or
+waiters FAIL as unknown subcommands - use the new forms everywhere:
+| gone (0.7) | 0.8.0 replacement |
+|---|---|
+| `agent send <t> "<text>"` + `pane send-keys <t> Enter` | `agent prompt <t> "<text>"` - types AND submits in one call; add `--wait [--until <status>] --timeout <ms>` to also block until the turn settles (a non-working target must show a state change within 5s or it returns `agent_prompt_stalled`) |
+| `agent start <name> --cwd .. --workspace .. --tab ..` | create the pane first (`tab create --workspace <ws> --cwd <dir>` root pane, or `pane split <pane> --cwd <dir> --no-focus`), then `agent start <name> --kind <claude\|codex\|grok\|pi\|…> --pane <pane_id> -- <extra argv>` |
+| `herdr wait output\|agent-status` | `pane wait-output <pane> (--match TEXT\|--regex PAT) [--timeout MS]` and `agent wait <t> [--until <status> …]` |
+| `agent wait --status idle` + the never-request-`done` workaround | `agent wait <t>` with NO flag matches `idle\|done\|blocked` - exactly the terminal set; `--until done` is first-class. The exit-code trap is gone; the commit-gate on top stays |
+| `agent read` returns JSON (extract `.result.read.text`) | `agent read` / `pane read` print TEXT directly |
+Verified capabilities to build on (each probed on a live pane):
+- **Engine integrations (install once per machine+user - Setup step 0):** `herdr integration install
+  claude codex grok pi`. Each engine's own hook (SessionStart) reports its SESSION IDENTITY to the pane's
+  server - `agent get` then shows `agent_session.source: herdr:claude` + the real session id, so
+  pane→agent binding is authoritative, not guessed. The hook no-ops outside herdr panes (guarded on
+  `HERDR_ENV=1`). `herdr integration status` shows drift after engine updates; re-install on drift.
+- **Every pane knows its own address:** `HERDR_ENV=1`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH` sit in every
+  pane's env - a child (or any script it runs) can always reach the server about ITSELF, e.g.
+  `herdr notification show "<slug>/<chunk-id> BLOCKED" --sound request` to toast the human in herdr the
+  moment it blocks (ALONGSIDE `fleetctl attn`, never instead), and `pane report-agent "$HERDR_PANE_ID" …`
+  for SHELL panes (dev servers, log tails, monitors) to label themselves for `agent wait`/the sidebar.
+- **Wake = authoritative status transition; payload = REPORT.md + fleetboard event.** The waiter spine is
+  `agent wait <name> --timeout <ms>` (fires on idle|done|blocked) + the commit-gate; the pane's gist
+  travels via its SIGNAL STEP (`fleetctl event`/`attn`) and REPORT.md - NEVER via screen text.
+- **Screen-scraping sentinels are DEAD for claude panes (probed):** Claude Code ≥2.1.x COLLAPSES tool
+  output - a briefed `echo FLEET-SIGNAL…` ran fine but the screen showed only "Ran 1 shell command", and
+  the armed `pane wait-output --regex '^FLEET-SIGNAL…'` timed out. `pane wait-output` stays useful only
+  for raw shell panes (build logs, dev servers) and engines proven to print output verbatim.
+- **`pane report-agent` cannot override a live agent pane (probed):** herdr's own detection holds pane
+  authority; a foreign `--source` report neither changes `agent_status` nor surfaces its `--message`.
+  Do not design agent-pane signals on it.
+- **Per-pane telemetry - READ it, never scrape it:** `agent get <name>` exposes `.result.agent.tokens`:
+  `context` = context fill (e.g. `⛁ 7% (74k)`), `limit` = rate-limit window (e.g. `5h 71%`). Tandem's
+  rotation trigger and the monitor's quota-dry early warning (the grok `403 out of credits` class) read
+  THIS field instead of grepping pane footers.
 
 ## Run map — wayfinder-inspired: ONE issue the human reads to understand the whole run
 The kanban shows status and the archive holds detail, but neither answers "where is this effort and what
@@ -347,6 +387,10 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
   marked AWAITING-DECISION → `✋` + bell; the fleet NEVER answers the human's side of a decision.
 
 ## Setup (once)
+0. **Engine integrations installed on EVERY fleet machine+user:** `herdr integration status` - any lane
+   engine showing `not installed` or a stale version → `herdr integration install claude codex grok pi`
+   (see Herdr backchannel primitives). Without them, pane→agent binding and the token telemetry the
+   waiters/monitor/tandem read are heuristic guesses. Remote: `ssh <host> 'herdr integration status'`.
 1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
    (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
 2. `herdr status` up. A **GitHub Project** board (`gh project create`) - see [REFERENCE.md](REFERENCE.md).
@@ -367,13 +411,17 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
 3. **Spawn, engine-routed + NAMED, into the FLEET TAB.** At placement, bind the machine slug registered by
    `fleetctl join --name <slug>` and keep both identities: local herdr name `<chunk-id>`; external/reporting
-   name `<slug>/<chunk-id>`. Spawn locally with `herdr agent start <chunk-id> --cwd <worktree> --tab
-   <fleet-tab-id> -- <engine argv>`. For a non-primary machine, execute the whole command there:
-   `ssh <host> 'herdr agent start <chunk-id> --cwd <worktree> --tab <fleet-tab-id> -- <engine argv>'`.
+   name `<slug>/<chunk-id>`. Spawn (0.8.0 two-step - see Herdr backchannel primitives): get a pane in the
+   fleet tab cwd'd at the worktree - the fleet tab's fresh root pane for the first chunk
+   (`tab create … --cwd <worktree>` returns `result.root_pane`), else `herdr pane split <a-fleet-tab-pane>
+   --direction down --cwd <worktree> --no-focus` - then `herdr agent start <chunk-id> --kind <kind>
+   --pane <pane_id> -- <engine args>` (`--kind` names the engine executable: claude|codex|grok|pi|…; the
+   argv after `--` is its flags only). For a non-primary machine, execute the same commands there:
+   `ssh <host> 'herdr pane split … && herdr agent start …'`.
    The remote agent NAME is still the bare chunk id; append the RES ledger line for the new pane (and any tab
    you just created) in this same wake (see Housekeeping: Resource ledger); set its local pane label too
    (`ssh <host> 'herdr pane rename <pane_id> "▶ <chunk-id>"'` - see Sidebar legibility). Every later
-   remote read/send/wait/rename/close follows the same host-explicit SSH form. Never use `herdr --remote` for
+   remote read/prompt/wait/rename/close follows the same host-explicit SSH form. Never use `herdr --remote` for
    driving; it is UI-attach only.
    Placement hierarchy (once per fleet run, not per chunk):
    **workspace = the project/space** (existing, human-labeled) → **tab 1 = the human's interactive sessions
@@ -385,9 +433,10 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    **Tab hygiene (live lesson - user caught both):** (a) run `herdr tab list --workspace <ws>` on the target
    server (through SSH when remote) BEFORE creating; reuse the expected `fleet:<epic>` or
    `fleet:<epic>@<slug>` tab instead of minting a duplicate; (b) `tab create` ships an empty root SHELL pane
-   (`result.root_pane` in the create response) - after the first chunk pane spawns into the tab, close that
-   root pane and sweep `herdr pane list --workspace <ws>` on the same target (no stray `shell` panes in
-   fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
+   (`result.root_pane` in the create response) - in 0.8.0 that root pane is the FIRST chunk's spawn target
+   (`agent start … --pane <root_pane>`), not waste; only close it when the tab pre-exists with agents and
+   the root shell sits empty. Sweep `herdr pane list --workspace <ws>` on the same target (no stray `shell`
+   panes in fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
    Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
    **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
    mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
@@ -399,8 +448,10 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    REFERENCE's “Codex pane launch protocol”. Pane spawned → emit `ASSIGNED`
    (`fleetctl event ASSIGNED --machine <slug> --chunk <chunk-id> --epic <epic> --gist "spawned <engine>"`).
 4. **Brief.** For Codex, the argv pointer from the bounded verifier in step 3 is the first brief — do **not**
-   `agent send` it again; wait for `BOOT_READY` before any later steering. For other panes, use literal
-   `agent send`, then a separate `pane send-keys Enter`. A brief = **CONTEXT section** (varies per chunk:
+   re-send it; wait for `BOOT_READY` before any later steering. For other panes, deliver with
+   `herdr agent prompt <chunk-id> "<pointer>"` (0.8.0: types AND submits in one call - the old
+   `agent send` + `send-keys Enter` dance is gone; verify the prompt line is EMPTY first, the append trap
+   in Hard rules still applies to a parked draft). A brief = **CONTEXT section** (varies per chunk:
    spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
    (fixed — copy it VERBATIM from REFERENCE.md, never freehand it)**. The block carries the whole chain:
    PLAN first (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) →
@@ -424,15 +475,17 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    gates loaded, which reads as compliance and isn't — so on a miss either sync skills to the box first or
    fall back to the non-Claude discipline variant (inline text works on every engine and every machine);
    (c) to **force-trigger** a skill/command in a claude pane, send the slash command as its OWN message
-   (`agent send "/skill-name <args>"` → `send-keys Enter`), never buried mid-paragraph, then `agent read`
+   (`agent prompt <chunk-id> "/skill-name <args>"`), never buried mid-paragraph, then `agent read`
    and confirm the command/skill banner appears before sending the follow-up context; plugin-namespaced
    skills (`superpowers:*`) additionally require that plugin installed under the pane's user — file-sync
    alone never provides them. Plan approved (the pane's written plan lands; AWAITING-DECISION design
    chunks: when the user's decision arrives) → emit `PLANNED`.
 5. **Arm waiter + monitor.** For Codex, do this only after the bounded past-boot launch gate succeeds. Run the
-   canonical background waiter from REFERENCE: `herdr agent wait` supplies
-   bounded backpressure only, then `herdr agent get` payloads gate on `agent_status` in `idle|done`; never
-   treat the wait command's exit code as completion. AND ensure the fleet **liveness monitor** loop is
+   canonical background waiter from REFERENCE: `herdr agent wait <chunk-id> --timeout <ms>` (0.8.0: no
+   flag = fires on `idle|done|blocked`, the full terminal set) supplies bounded backpressure, then
+   `herdr agent get` payloads gate on `agent_status` in `idle|done` PLUS the commit-gate (a commit beyond
+   `origin/main` or a dirty tree - status alone is never completion); `blocked` wakes route to the
+   unblock path, not the gate. AND ensure the fleet **liveness monitor** loop is
    running (it sweeps this pane for stuck/errored/dead).
 6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane (its commit+report already emitted `BUILT` via the SIGNAL STEP; on READY_UNCOMMITTED you commit the pane's work and emit `BUILT` yourself), then three passes before your judgment:
    a. **Cross-engine review** (dispatching it = emit `IN_REVIEW`)**:** the chunk's diff is reviewed by a DIFFERENT engine than built it - grok-built → `codex review`; codex-built → fable/opus adversarial review (grok is BUILD-only, it stalls on review workloads - the model-table rule, now consistent here). Reviewer instruction: report EVERY concrete finding with evidence, no severity self-filtering - the orchestrator triages. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
@@ -466,7 +519,9 @@ think it's building. Waiters alone are blind to this - so run ONE wall-clock mon
 in parallel with the per-pane waiters. It RINGS; it does not auto-kill (classify via tail first - never kill a
 genuinely-`working` pane).
 1. **Sweep every ~2 min** (`run_in_background`, re-arming): `herdr agent list` → for each active fleet pane
-   snapshot `{status, normalized-tail fingerprint, commits-beyond-main, dirty}` and diff vs the last snapshot in a state
+   snapshot `{status, normalized-tail fingerprint, commits-beyond-main, dirty, tokens}` (`tokens` from
+   `agent get` - `.limit` near-exhausted = quota-dry EARLY warning, ring before the 403 freezes the pane;
+   see Herdr backchannel primitives) and diff vs the last snapshot in a state
    file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
 2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script) → ring immediately
    (`fleetctl attn <fleet-id> "<machine-slug>/<chunk-id> errored: <line>"` + PushNotification on the
@@ -609,21 +664,21 @@ Idle machines run ONLY the heartbeat daemon - no idle steward stays resident.
 Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
 
 ## Hard rules (live-dogfood lessons)
-- **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** clear prompt
-  before `send`; submit is a separate `send-keys Enter`.
-- **`agent send` APPENDS to whatever is on the prompt line (verified live 2026-07-17); NEVER send onto a
-  non-empty prompt.** The 2026-07-10 "replaces" reading was wrong: under append, steering a pane that holds
+- **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** confirm an empty
+  prompt line before any `agent prompt`.
+- **Typed text APPENDS to whatever is on the prompt line (verified live 2026-07-17); NEVER prompt onto a
+  non-empty line.** The 2026-07-10 "replaces" reading was wrong: under append, steering a pane that holds
   a parked draft CORRUPTS it by concatenation, which is what that incident actually showed. A bare
   `send-keys Enter` on a human-typed parked draft still cannot be trusted to submit it; verify status flips
-  to `working` after EVERY submit, never assume. Correct parked-draft submit protocol: (1) `agent read` to
-  capture + log the draft, (2) `send-keys Ctrl+U`, then fresh-read to confirm an empty prompt, (3) `agent
-  send <full intended text>`, then fresh-read to confirm it arrived intact, (4) `send-keys Enter`, (5)
-  confirm status = `working`. Only then send your own steering as the next message.
+  to `working` after EVERY submit, never assume. Correct parked-draft submit protocol (0.8.0 commands):
+  (1) `agent read` to capture + log the draft, (2) `agent send-keys <t> Ctrl+U`, then fresh-read to confirm
+  an empty prompt, (3) `agent prompt <t> "<full intended text>" --wait` and (4) confirm status flipped to
+  `working`. Only then send your own steering as the next message.
 - **Name everything locally; qualify everything externally.** `agent start <chunk-id>` — the herdr NAME is
   the bare chunk id, unique only inside that server's own agent table (never generic like `codex`: detected
-  labels are also targets → ambiguous locally). ALL `herdr agent *` commands (get/read/send/wait/rename/
+  labels are also targets → ambiguous locally). ALL `herdr agent *` commands (get/read/prompt/wait/rename/
   focus/attach) accept that bare local NAME. Pane id is required ONLY for `herdr pane *`
-  (send-keys/run/close) and `herdr wait output|agent-status` — resolve on that server:
+  (send-text/send-keys/run/close/wait-output) — resolve on that server:
   `herdr agent get <chunk-id> | jq -r .result.agent.pane_id`. Every reference that leaves the machine —
   ledger, kanban card, run map, lifecycle/signal/monitor event, `fleetctl attn` line, run archive, rotation
   handoff, and report to the human — MUST use `<machine-slug>/<chunk-id>`. Human reports say
@@ -645,7 +700,7 @@ Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
   CHANGES on move (wV:pC → w0:p1) but the agent NAME resolves seamlessly across it — one more reason waiters
   and every reference must target the NAME; any pane-id-addressed waiter dies silently on a move (re-arm by
   name).
-- **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on polled `agent get` payloads in `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). `herdr agent wait --status idle` is LEVEL-triggered; against `done` it resolves quickly but exits 1, so its exit code is never the gate. Never request `done` through `agent wait`; use pane-addressed `herdr wait agent-status` only when `done` must be a first-class target. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
+- **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on polled `agent get` payloads in `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). 0.8.0 retired the old workaround: `agent wait <t>` with no flag matches `idle|done|blocked`, and `--until done` is a first-class target - but the STATUS is still only the wake, never the gate. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
 - **Idle != done (background-shell flap).** A pane reports idle/`done` while merely *holding on a background shell* (a test suite,
   a forked review). Gate on a REAL signal: a **commit beyond `origin/main`** + a final report/STOP - not bare
   idle. Make the waiter **commit-gated** (re-arm until a commit appears). Live lesson: a pane mid `+2292/-11510`
@@ -684,7 +739,7 @@ Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Never brief `git add -A` while worktree-root scratch exists (live lesson - BRIEF.md/REPORT.md shipped to main twice).** Pane briefs and reports live at the worktree root; `add -A` commits them, the squash-merge lands them on main, and every later worktree "inherits" a stale brief. Fix: gitignore the scratch names (`/BRIEF.md`, `/REPORT.md`) in the repo once, AND write briefs with explicit `git add <paths>` or `git add -A ':!BRIEF.md' ':!REPORT.md'`. Gate check: the review diff must not contain the brief/report files.
 - **Long briefs travel as files, not keystrokes (2026-07-10 API-drop lessons).** Spawning/briefing with a
-  large prompt over `agent send` during API instability drops mid-stream and leaves half-briefed panes +
+  large prompt over `agent prompt` during API instability drops mid-stream and leaves half-briefed panes +
   stale drafts. Write the brief to the worktree as BRIEF.md and SEND A SHORT POINTER ("read BRIEF.md and
   execute"); same for any steering over ~10 lines.
 - **Waiter timeout != stuck: verify liveness before acting (2026-07-10).** Commit-gated waiters time out

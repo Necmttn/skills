@@ -10,7 +10,7 @@ The slug minted by `fleetctl join --name <slug>` is the machine id. Keep these t
 
 Template placeholders `<name>` mean the bare local herdr name; `<report-name>` means the qualified external
 identity. Drive another server only by executing the whole command there, for example
-`ssh <host> 'herdr agent send <name> "..."'`; keep `<host>` explicit on every read/send/wait/pane/tab call.
+`ssh <host> 'herdr agent prompt <name> "..."'`; keep `<host>` explicit on every read/prompt/wait/pane/tab call.
 Never assume names are globally unique, point a local client at a remote socket, or combine a driving
 subcommand with `herdr --remote`; `--remote` is interactive UI-attach only.
 
@@ -66,7 +66,7 @@ pane - it lands on the prompt line, not a modal.
 
 **Codex pane launch protocol (verified live 2026-07-16 - REQUIRED, panes die otherwise):** codex TUI
 launched with `--dangerously-bypass-approvals-and-sandbox` boots into a Yes/No trust MODAL, and ANY text
-delivered while the modal is up (`agent send`, `pane send-text`) CRASHES the pane - this reads as "codex
+delivered while the modal is up (`agent prompt`, `pane send-text`) CRASHES the pane - this reads as "codex
 died on brief". `working` alone is NOT proof that the argv prompt ran: the startup spinner also reports
 `working`. Protocol: (1) pass the brief pointer plus a unique turn token AS AN ARGUMENT at spawn; (2) wait
 for boot (~10s), then send ONE bare `herdr pane send-keys <pane> Enter` on that server to accept the modal;
@@ -112,7 +112,7 @@ always single-quote, e.g. `-c 'model_reasoning_effort="medium"'`.
   In-session toggle: `/fast`. Kill-switch env: `CLAUDE_CODE_DISABLE_FAST_MODE`.
 - **Codex fast mode:** persistent form is `service_tier = "fast"` + `[features] fast_mode = true` in
   `~/.codex/config.toml` (don't — flips every codex run); per-pane `-c` overrides above. Post-launch fallback
-  for TUI panes: send `/fast on` + separate `send-keys Enter`; `codex exec` panes have no slash commands →
+  for TUI panes: `agent prompt <name> "/fast on"`; `codex exec` panes have no slash commands →
   `-c` at launch is the ONLY way. ChatGPT sign-in only; API-key auth ignores it (bills standard API pricing).
 - **Spark:** research-preview (Pro) — access can vanish; on model-not-found fall back to the plain codex lane.
   Smaller model (above gpt-5.1-codex-mini, below full gpt-5.5-codex): gate HARD, escalate on any ambiguity.
@@ -135,7 +135,7 @@ machine+user (once per fleet run, ledger-cached):
 - every skill the Claude-variant block names must be present; ANY miss -> use the non-Claude variant
   (inline discipline) for that pane, or sync skills to the box first and re-probe.
 - force-triggering a skill/command in a claude pane: send the slash command as its OWN message -
-  `herdr agent send <name> "/skill-name <args>"` then `herdr pane send-keys <pane> Enter` - then
+  `herdr agent prompt <name> "/skill-name <args>"` - then
   `agent read` to confirm the command/skill banner loaded before sending follow-up context. A skill
   named mid-paragraph in a long brief is advisory prose, not a trigger. For a remote pane, execute each
   of those commands separately as `ssh <host> 'herdr ...'`.
@@ -201,7 +201,7 @@ machine+user (once per fleet run, ledger-cached):
 > DONE|BLOCKED|ERROR <one-line gist>" to <signals-path>. Stopping without signaling means the orchestrator
 > may never see your result.
 
-## Build-pane brief template (one line - no newlines/apostrophes; send + `send-keys Enter`)
+## Build-pane brief template (one line - no newlines/apostrophes; deliver via `agent prompt`)
 Example of CONTEXT + block fused for a standard build chunk; for other shapes (bug fix, refactor) write your
 own context and append the block above.
 > Act as a focused implementer for ONE chunk. Read <goal-brief path> (ship-style + chunk specs). Your
@@ -228,7 +228,7 @@ idle↔working → notification storm. Gate the waiter on a polled `idle|done` s
 P="$1"; WT="$2"; REPORT_NAME="${3:?pass machine-slug/chunk-id}"   # P stays the bare local agent name
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 160); do
-  herdr agent wait "$P" --status idle --timeout 90000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
+  herdr agent wait "$P" --timeout 90000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
   case "$(st)" in idle|done) ;; *) sleep 2; continue;; esac
   if [ -n "$WT" ]; then
     c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
@@ -251,14 +251,14 @@ further commit.)
 **Refinement 2 (LIVE define_view run — three failures the commit-only gate can't see):**
 1. **A build pane can finish gated-green but NOT `git commit`.** Codex is *inconsistent*: same brief, some chunks committed, one finished with work staged/modified but uncommitted -> `rev-list origin/main..HEAD` empty forever -> waiter spins to TIMEOUT (~silent 30-40 min), orchestrator never advances. SAME failure as a dogfood pane leaving work uncommitted -- NOT dogfood-specific. **Gate build panes on stable-idle AND (commit OR dirty-working-tree)**: `dirty=$(git -C "$WT" status --porcelain)`. Emit a DISTINCT signal -- `READY` (committed) vs `READY_UNCOMMITTED` (idle+dirty); on the latter the orchestrator commits the pane's work ITSELF (`git add -A ':!BRIEF.md' ':!REPORT.md' && git commit`) before gating. Belt: every brief must say *"run `git add -A ':!BRIEF.md' ':!REPORT.md' && git commit` before you stop -- an uncommitted worktree is treated as UNFINISHED."*
 2. **Panes finish in status `done`, not `idle`.** Codex ends a chunk in `agent_status: done` (terminal), so a waiter gating on `= idle` only loops past a finished pane to TIMEOUT. ALWAYS accept `idle|done` (build AND dogfood waiters).
-3. **Wait trap (verified live): `herdr agent wait --status idle` is LEVEL-triggered and only a backpressure hint.** Against a real `done` pane it resolves in ~10ms but exits 1, while its payload's `agent_status` remains `done`; ignore that exit code and poll `herdr agent get`, accepting `idle|done`. Never pass `--status done` to `herdr agent wait` — it is hard-rejected. When `done` must be a first-class wait target, resolve the pane id with `agent get` and use `herdr wait agent-status <pane_id> --status done`. herdr has **no native turn-finished event/webhook**; the only true edge-trigger is `herdr wait output <pane_id> --match <sentinel> --regex` (blocks for NEW output; pane-id ONLY — names rejected, resolve via `agent get <name>`) -- optional fast-path if the pane echoes a sentinel last. Otherwise the git-state gate (commit OR dirty) is the authority.
+3. **Wait semantics (herdr 0.8.0): `herdr agent wait <t>` with NO flag matches `idle|done|blocked` - the full terminal set - and `--until done` is first-class.** The old `--status` flag and its exits-1-on-done trap are GONE; still treat the wait as backpressure only and poll `herdr agent get` for the authoritative payload. Do NOT use screen sentinels (`pane wait-output --regex`) as a fast-path for claude panes: Claude Code >=2.1.x collapses tool output, so a briefed `echo <sentinel>` never reaches the screen (probed live 2026-08-15; see the SKILL's Herdr backchannel primitives). The git-state gate (commit OR dirty) stays the authority; a `blocked` wake routes to the unblock path, not the gate.
 
 Corrected canonical build waiter:
 ```sh
 P="$1"; WT="$2"; REPORT_NAME="${3:?pass machine-slug/chunk-id}"   # P stays the bare local name
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 240); do
-  herdr agent wait "$P" --status idle --timeout 8000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
+  herdr agent wait "$P" --timeout 8000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
   case "$(st)" in idle|done) ;; *) sleep 2; continue;; esac
   sleep 4; case "$(st)" in idle|done) ;; *) continue;; esac              # settle; guard idle flaps
   c=$(git -C "$WT" rev-list --count origin/main..HEAD 2>/dev/null)
@@ -276,7 +276,7 @@ before AND after a settle pause:
 P="$1"; REPORT_NAME="${2:?pass machine-slug/chunk-id}"   # P stays the bare local name
 st(){ herdr agent get "$P" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null; }
 for i in $(seq 1 120); do
-  herdr agent wait "$P" --status idle --timeout 90000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
+  herdr agent wait "$P" --timeout 90000 >/dev/null 2>&1 || :  # backpressure only; ignore its exit code
   case "$(st)" in idle|done) ;; *) sleep 2; continue;; esac
   sleep 45                                                               # settle
   case "$(st)" in idle|done) echo "STABLE-IDLE:$REPORT_NAME"; exit 0;; esac # parse failure/unknown stays running
@@ -416,7 +416,7 @@ Move a card: re-run `item-edit` with the target Status option id (Todo→In Prog
 > flag starvation (no wake progress AND no new commits on fleet branches - always check commits before
 > flagging), context bloat past the rotation threshold, parked drafts blocking steering (log the draft,
 > then follow the submit protocol), dead waiters/monitor. On a finding: send ONE terse message to the
-> orchestrator (herdr agent send <orchestrator-name> "TANDEM: <finding + suggested action>" then a separate
+> orchestrator (herdr agent prompt <orchestrator-name> "TANDEM: <finding + suggested action>" -
 > Enter); if the same cause blocks 2 consecutive cycles, ring the bell (fleetctl attn <fleet-id> "...").
 > (1b) ROTATION TRIGGERS - you, not the orchestrator, hold these. Each loop: read the orchestrator
 > pane's VISIBLE bottom lines (herdr agent read <orchestrator-name> --source visible --lines 8) and grep
@@ -435,8 +435,9 @@ fallback), local pane name `steward:<epic>`, into that machine's `fleet:<epic>@<
 ONE tab per machine - the steward shares its machine's fleet tab rather than minting its own, unlike the
 Mac orchestrator's dedicated pane). Long briefs
 travel as files (hard rule): write this template to the machine, spawn with a short pointer, e.g.
-`ssh <host> 'herdr agent start steward:<epic> --tab <tab_id> -- claude --model fable
---dangerously-skip-permissions'` then send "Read <brief path> and execute it fully". This template IS a
+`ssh <host> 'herdr pane split <a-fleet-tab-pane> --cwd <repo> --no-focus'` then `ssh <host> 'herdr agent start
+steward:<epic> --kind claude --pane <new-pane> -- --model fable --dangerously-skip-permissions'` (0.8.0
+two-step) then `agent prompt` "Read <brief path> and execute it fully". This template IS a
 CONTEXT + discipline contract - send it whole, placeholders filled; do not freehand it.
 > You are the STEWARD for machine <slug> in fleet <epic> - the on-demand per-machine orchestrator
 > (read fleet-ship SKILL.md, esp. 'Steward mode' + 'Per-chunk loop'). Register on fleetboard as a new
