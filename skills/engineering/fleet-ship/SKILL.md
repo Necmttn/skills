@@ -391,6 +391,10 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
    engine showing `not installed` or a stale version → `herdr integration install claude codex grok pi`
    (see Herdr backchannel primitives). Without them, pane→agent binding and the token telemetry the
    waiters/monitor/tandem read are heuristic guesses. Remote: `ssh <host> 'herdr integration status'`.
+   ALSO ensure the **pi.orchestrator herdr plugin** is linked + enabled (`herdr plugin list`; source
+   `~/Projects/herdr-pi-orchestrator`) - it is the machine-wide event queue, the BLOCKED/DONE toasts,
+   AND the transient-error **auto-retry** rung (see Liveness monitor). Tune it via
+   `$(herdr plugin config-dir pi.orchestrator)/.env`.
 1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
    (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
 2. `herdr status` up. A **GitHub Project** board (`gh project create`) - see [REFERENCE.md](REFERENCE.md).
@@ -451,7 +455,11 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    re-send it; wait for `BOOT_READY` before any later steering. For other panes, deliver with
    `herdr agent prompt <chunk-id> "<pointer>"` (0.8.0: types AND submits in one call - the old
    `agent send` + `send-keys Enter` dance is gone; verify the prompt line is EMPTY first, the append trap
-   in Hard rules still applies to a parked draft). A brief = **CONTEXT section** (varies per chunk:
+   in Hard rules still applies to a parked draft). **Brief-delivery gate (EVERY engine, not just codex -
+   live incident 2026-08-15: an orchestrator died mid-send and its freshly spawned pane sat at Ctx 0,
+   never briefed):** after delivering, confirm status flips to `working` (`agent prompt --wait --until
+   working` does this in one call); a pane still idle on an empty prompt got NO brief - re-deliver
+   (bounded, 2 tries) then ring. Never assume a sent brief arrived. A brief = **CONTEXT section** (varies per chunk:
    spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
    (fixed — copy it VERBATIM from REFERENCE.md, never freehand it)**. The block carries the whole chain:
    PLAN first (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) →
@@ -523,9 +531,14 @@ genuinely-`working` pane).
    `agent get` - `.limit` near-exhausted = quota-dry EARLY warning, ring before the 403 freezes the pane;
    see Herdr backchannel primitives) and diff vs the last snapshot in a state
    file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
-2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script) → ring immediately
-   (`fleetctl attn <fleet-id> "<machine-slug>/<chunk-id> errored: <line>"` + PushNotification on the
-   user's Mac); don't wait out K sweeps.
+2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script). **Rung 0 is
+   AUTOMATED and already ran before you see it:** the pi.orchestrator plugin auto-retries transient
+   errors (API stall/mid-stream drop/429/5xx/overloaded) up to PI_ORCH_RETRY_MAX times per pane -
+   check its `state/events.jsonl` for `auto_retry`/`retry_exhausted`/`retry_fatal` records (2026-08-15,
+   built from the live 2h Opus stall + never-briefed child incident). Ring immediately ONLY for:
+   `retry_fatal` (quota/auth - needs respawn on a funded lane), `retry_exhausted`, or a signature the
+   plugin missed (`fleetctl attn <fleet-id> "<machine-slug>/<chunk-id> errored: <line>"` +
+   PushNotification on the user's Mac); don't wait out K sweeps.
 3. **STUCK** - status + normalized-tail fingerprint + commit-count ALL unchanged for K sweeps (~6-10 min)
    while status ∉ `{idle,done}` → ring. The normalizer ignores only volatile terminal chrome (spinner elapsed
    time, `esc to interrupt`, context-% footer), so a boot spinner now goes stale while real commands, logs,
