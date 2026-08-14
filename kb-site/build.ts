@@ -72,6 +72,16 @@ const SECTIONS: Section[] = [
     docs: [{ id: "aso-lockin", title: "Lock In Chinese ASO playbook", path: join(PLAYBOOKS, "aso-lockin-chinese.md") }],
   },
   {
+    id: "shipping",
+    title: "Shipping",
+    docs: [
+      { id: "ship-sop", title: "Ship SOP (phases + owner gates)", path: join(KB_DIR, "SHIPPING.md") },
+      { id: "ship-lockin-launch", title: "Lock In Chinese launch checklist", path: join(APPS_REPO, "apps/lockin-chinese/docs/LAUNCH_CHECKLIST.md") },
+      { id: "ship-lockin-state", title: "Lock In Chinese submission state", path: join(APPS_REPO, "apps/lockin-chinese/docs/APP_STORE_SUBMISSION.md") },
+      { id: "ship-lang-readiness", title: "Language-app launch readiness", path: join(PLAYBOOKS, "lockin-language-launch-readiness.md") },
+    ],
+  },
+  {
     id: "appreview",
     title: "App Review",
     docs: [
