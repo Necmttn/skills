@@ -72,6 +72,16 @@ const SECTIONS: Section[] = [
     docs: [{ id: "aso-lockin", title: "Lock In Chinese ASO playbook", path: join(PLAYBOOKS, "aso-lockin-chinese.md") }],
   },
   {
+    id: "appreview",
+    title: "App Review",
+    docs: [
+      { id: "rejections", title: "Rejection ledger", path: join(KB_DIR, "REJECTIONS.md"), special: "experiments" },
+      { id: "submission-gate", title: "Submission playbook (the gate)", path: join(PLAYBOOKS, "app-store-submission.md") },
+      { id: "rej-family-controls", title: "Evidence: 2.5.1 Family Controls (2026-08-04)", path: join(APPS_REPO, "apps/lockin-chinese/docs/review/2026-08-04-family-controls-rejection.md") },
+      { id: "rej-skip-trial", title: "Evidence: 3.1.2(c) skip-trial toggle (2026-08-12)", path: join(APPS_REPO, "apps/lockin-chinese/docs/review/2026-08-12-skip-trial-toggle-rejection.md") },
+    ],
+  },
+  {
     id: "growth",
     title: "Growth & Analytics",
     docs: [
@@ -425,7 +435,7 @@ th { background: var(--code-bg); }
   flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); margin-top: 3px;
 }
-.badge-sota, .badge-shipped, .badge-decided { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.badge-sota, .badge-shipped, .badge-decided, .badge-fixed { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .badge-decided { opacity: 0.75; }
 .badge-directional, .badge-open { border-color: var(--accent); color: var(--accent); }
 .badge-retired { text-decoration: line-through; }

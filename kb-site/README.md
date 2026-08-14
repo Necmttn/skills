@@ -14,6 +14,7 @@ Output: `kb-site/dist/index.html` (self-contained, no server needed). `/` focuse
 
 - `SOTA.md` - one verdict per line with a `[sota]` / `[directional]` / `[retired]` status, evidence link, and date. This file is the answer to "what do we currently call SOTA". Append; never silently delete - flip to `[retired]` instead.
 - `EXPERIMENTS.md` - cross-repo index of our own experiments. The authoritative per-experiment ledger files live in the apps repo under `docs/experiments/` (growth-ops rule).
+- `REJECTIONS.md` - App Review rejection ledger: what Apple said, the real root cause, the fix, the guard, the lesson. Companion rule: every rejection also adds a rule with a verify command to the submission playbook.
 - `build.ts` - reads the manifest of sources (these two files, the knowledge skills in `skills/engineering/`, and playbooks in `~/Projects/apps/docs/playbooks/`) and renders the site. A missing source renders as a note, not an error.
 
 ## Updating

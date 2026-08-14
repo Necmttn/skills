@@ -47,6 +47,16 @@ Maintenance: append new verdicts with a date; when a verdict changes, flip its s
 - [retired] Seal Poster (sets C/G), Dossier (D), Layered callouts (K) - rejected by owner; exception: K5 unlock-window panel stays locked/approved. (2026-07-24)
 - [directional] Cool-modern-3D-young studies W1-W4 (exploded UI / dark premium / kinetic type) - on-brand, pending owner pick before extending to a full set. (2026-07-24)
 
+## App Review
+
+- [sota] Every rejection gets a ledger entry (kb-site REJECTIONS.md) AND a new playbook rule with a verify command - a rule with no check is not a rule. Evidence: app-store-submission playbook maintenance rule. (2026-07-28)
+- [sota] An app running a pattern live is not evidence Apple approves it - it means they have not been caught. Never justify a paywall tactic by competitor sightings. Evidence: 3.1.2(c) rejection 2026-08-12. (2026-08-12)
+- [retired] Skip-trial toggle on any paywall surface - rejected under 3.1.2(c); binary + publish validator + source scan all guard it now. Evidence: PR #1143. (2026-08-12)
+- [sota] Verify the binary Apple received, not your source: `GET /v1/builds/{id}?include=buildBundles` returns signed entitlements per mach-o path. Debug `otool` lies - measure a Release build. Evidence: 2.5.1 rejection 2026-08-04. (2026-08-07)
+- [sota] The ASC API exposes no rejection text - read Resolution Center in the ASC web UI or the owner's Apple mailbox. Evidence: 3.1.2(c) round. (2026-08-12)
+- [sota] iPhone-only apps get reviewed on iPad in iPhone-compat mode: screens use min-height viewports (`SDUIFillViewport`), never exact-height frames that clip CTAs. Evidence: Guideline 4 rejection 2026-08-13. (2026-08-13)
+- [directional] Post-decline offer ladder must be time-separated: one immediate offer, then the winback days later - a burst of cheaper offers after a decline reads as 5.6 manipulation. Fix in flight; flip to sota when the resubmission passes. Evidence: Guideline 5.6 rejection 2026-08-13, BRIEF-lockin-rejection-3. (2026-08-13)
+
 ## Growth & Analytics
 
 - [sota] Growth-ops loop is the operating system: every experiment gets a ledger file in `docs/experiments/` (no file = no experiment; no DECIDED line = still open); readouts quote METRICS.md metric names only. Evidence: PR #1070, growth-ops playbook. (2026-08-01)
