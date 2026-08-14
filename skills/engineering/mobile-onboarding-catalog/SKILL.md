@@ -118,6 +118,12 @@ A third, narrow option: **no onboarding at all**. When the first action IS the v
 - **Action:** move education to the moment of need: per-field tooltips answering the objection that field raises, plus reversibility copy and a human escape hatch (Cake Equity on equity/vesting); inline validation, e.g. Acorns listing password rules before typing and ticking them off per keystroke; a real populated starter document instead of a blank state (Notion's "Getting Started" page is editable and partly pre-checked - you learn the editor by editing the lesson); and a persistent checklist instead of popups - Mural's six-step "1 of 6 Complete" checklist replacing popups/banners drove +10% relative one-week retention. Checklists survive dismissal; tours don't.
 - **Rule:** ux-psychology 1 (smart defaults) + 10 (Zeigarnik - the unchecked checklist nags) + 2 (goal gradient). **Apps:** Cake Equity, Acorns, Notion, Mural. **Screens:** [SCREENS.md P16](SCREENS.md#p16---just-in-time-education). **Source:** [Mobbin study](sources/mobbin-1460-onboarding-study.md).
 
+### P17. Pain-amplification ladder + proof-of-pain stats
+
+- **Trigger:** the block immediately before the personalizing/paywall sequence in a quiz-funnel flow (after preferences and permissions).
+- **Action:** ask about the same core problem from 3-4 angles as statement-style questions ("always doing this last minute?") on a 4-point frequency scale (very often / sometimes / rarely / never), ending with the emotional angle (how it makes them feel). Then run the plan-generation loader (P4), then 1-2 stat screens tying a social-proof statistic to the pains just named ("X% of people in this situation report Y"), charted. The paywall follows while the problem is maximally salient - the user has just described their own problem four ways and seen proof it is real and common.
+- **Rule:** ux-psychology 5 (loss aversion) + 7 (effort justification). **Apps:** Noom (projection-chart variant), maxzr quiz-funnel template (self-reported 94% onboarding-start -> paywall-view rate - see CATALOG). **Ethics:** amplify only pains the user actually reported; stats must be real and sourced, never invented.
+
 ## Generation workflow
 
 1. Pick a model (value-first vs quiz-funnel vs no-onboarding) from the app's value type.

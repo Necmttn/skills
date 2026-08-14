@@ -240,6 +240,17 @@ Maintenance rules:
 - **Sources:** [App Fuel - Fitbod onboarding](https://www.theappfuel.com/examples/fitbod_onboarding), [Uiland - Fitbod paywall flow](https://uiland.design/flows/Paywall%20and%20Subscription/Fitbod).
 - **Verified:** 2026-07-16. **Confidence:** thin (paywall placement unverified; strongest on the equipment/experience personalization).
 
+### maxzr quiz-funnel template (practitioner breakdown, app unnamed)
+- **Flow:** welcome hero with "Get Started" (ATT prompt fires here; A/B variant assigned + tagged as Mixpanel Super Property) -> name (casual framing, text field, skippable - deliberately the FIRST data point) -> gender single-select -> usage frequency (calibrates later copy/stats) -> referral source (App Store/TikTok/Meta/YouTube/friend/search/X/Instagram/other - pure attribution, no UX effect) -> goals multi-select (desire before any feature shown) -> favorites/preferences optional multi-select (investment step) -> reviews/social-proof screen + native iOS rating prompt (AFTER investment, not screen 2) -> notification permission (value explained first; Continue works on allow or deny) -> pain point 1: timing ("always doing this last minute?", 4-point frequency scale) -> pain point 2 (product-specific) -> pain point 3 (third angle) -> pain point 4 (emotional - how it makes them feel) -> "Personalizing..." ~4-5s checklist loader referencing their answers -> stats screen 1 (social-proof stat tied to pain 1, chart) -> stats screen 2 (bar chart, pain 2 - last screen before offer) -> paywall (RevenueCat offering/experiment; dismiss routes to a win-back/cancel offer) -> account only AFTER purchase.
+- **Quiz length:** 16 screens before the paywall (screens 0-15).
+- **Paywall:** end of onboarding; win-back offer on dismiss.
+- **Signup:** after purchase, never before.
+- **Key moves:** stated ordering logic: identity -> context -> desire -> investment -> trust -> permission -> pain (4 angles) -> "we heard you" loader -> proof-of-pain stats -> offer -> account. Replaced a feature-tour-first control ("users don't care about your features before they feel understood") and was shipped as a real production A/B, judged on meaningful paywall decisions + purchase conversion, not screen views. Self-reported result: **94% of onboarding starts reach the paywall**.
+- **Patterns:** P3, P4, P8, P10, P17.
+- **Why it works:** the user describes their own problem from four angles, then sees data proving it is common - the paywall lands as the answer to a problem at maximum salience.
+- **Sources:** [@maxzrco X breakdown](https://x.com/maxzrco/status/2086919205601820831).
+- **Verified:** 2026-08-14. **Confidence:** thin (self-reported by the builder; app unnamed; no independent teardown or audited numbers).
+
 ---
 
 ## Benchmarks
@@ -252,6 +263,7 @@ Numbers below are from the primary source that owns them. Edition/year tagged. H
 - Onboarding paywalls without a trial have the **highest conversion rate at 37.45%** but the lowest long-term value - [Adapty State of In-App Subscriptions 2026](https://adapty.io/state-of-in-app-subscriptions/).
 - **Hard paywalls generate 21% higher LTV per subscriber** than soft; hard median LTV $41.9 vs soft $20.0. Soft paywalls convert ~50% better but earn less per user - [Adapty - high-performing paywall 2026](https://adapty.io/blog/high-performing-paywall-2026/).
 - Case studies moving the paywall earlier: **Greg raised sign-up-to-trial from 3% to 15% (5x)**; **Rootd got a 5x revenue increase** - [RevenueCat - optimizing paywall placement](https://www.revenuecat.com/blog/growth/paywall-placement).
+- Onboarding-start -> paywall-view: **94% self-reported** for a 16-screen pain-first quiz funnel (identity -> context -> desire -> investment -> trust -> permission -> 4 pain questions -> stats -> paywall), beating a feature-tour-first control - [@maxzrco](https://x.com/maxzrco/status/2086919205601820831). Single unnamed app, builder's own number; treat as a funnel-completion reference point, not an audited benchmark.
 
 ### Trial timing (why the paywall belongs on Day 0)
 - **82% of trial starts happen the same day as install** - [RevenueCat SoSA 2025](https://www.revenuecat.com/state-of-subscription-apps-2025).
