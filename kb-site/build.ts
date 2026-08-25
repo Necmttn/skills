@@ -95,6 +95,14 @@ const SECTIONS: Section[] = [
       { id: "aso-vibe-screenshots", title: "vibe-aso: localized screenshots (phase 3)", path: join(EXTERNAL, "vibe-aso/reference/screenshots.md") },
       { id: "aso-vibe-pricing", title: "vibe-aso: worldwide pricing (phase 4)", path: join(EXTERNAL, "vibe-aso/reference/pricing.md") },
       { id: "aso-vibe-inapp", title: "vibe-aso: in-app localization (phase 5)", path: join(EXTERNAL, "vibe-aso/reference/app-localization.md") },
+      { id: "asosk-upstream", title: "aso-skills: provenance + what is mirrored (third-party, MIT)", path: join(EXTERNAL, "aso-skills/UPSTREAM.md") },
+      { id: "asosk-cpp", title: "aso-skills: Custom Product Pages (35 variants)", path: join(EXTERNAL, "aso-skills/skills/custom-product-pages/SKILL.md") },
+      { id: "asosk-events", title: "aso-skills: In-App Events (Today tab, search cards)", path: join(EXTERNAL, "aso-skills/skills/in-app-events/SKILL.md") },
+      { id: "asosk-ppo", title: "aso-skills: PPO A/B testing the product page", path: join(EXTERNAL, "aso-skills/skills/ab-test-store-listing/SKILL.md") },
+      { id: "asosk-screens", title: "aso-skills: screenshot optimization", path: join(EXTERNAL, "aso-skills/skills/screenshot-optimization/SKILL.md") },
+      { id: "asosk-preview", title: "aso-skills: App Preview video", path: join(EXTERNAL, "aso-skills/skills/app-preview-video/SKILL.md") },
+      { id: "asosk-featured", title: "aso-skills: getting featured", path: join(EXTERNAL, "aso-skills/skills/app-store-featured/SKILL.md") },
+      { id: "asosk-launch", title: "aso-skills: app launch sequence", path: join(EXTERNAL, "aso-skills/skills/app-launch/SKILL.md") },
     ],
   },
   {
@@ -118,6 +126,7 @@ const SECTIONS: Section[] = [
       { id: "rej-family-controls", title: "Evidence: 2.5.1 Family Controls (2026-08-04)", path: join(APPS_REPO, "apps/lockin-chinese/docs/review/2026-08-04-family-controls-rejection.md") },
       { id: "rej-skip-trial", title: "Evidence: 3.1.2(c) skip-trial toggle (2026-08-12)", path: join(APPS_REPO, "apps/lockin-chinese/docs/review/2026-08-12-skip-trial-toggle-rejection.md") },
       { id: "aso-vibe-submit", title: "vibe-aso: ASC field checklist, API vs manual (third-party)", path: join(EXTERNAL, "vibe-aso/reference/submission-checklist.md") },
+      { id: "asosk-rejection", title: "aso-skills: rejection recovery by guideline (third-party)", path: join(EXTERNAL, "aso-skills/skills/app-rejection-recovery/SKILL.md") },
     ],
   },
   {
