@@ -19,6 +19,7 @@ const KB_DIR = import.meta.dir;
 const SKILLS_ENG = resolve(KB_DIR, "../skills/engineering");
 const APPS_REPO = "/Users/necmttn/Projects/apps";
 const PLAYBOOKS = join(APPS_REPO, "docs/playbooks");
+const EXTERNAL = join(KB_DIR, "external");
 
 type Doc = {
   id: string;
@@ -38,6 +39,15 @@ const SECTIONS: Section[] = [
     id: "experiments",
     title: "Experiments",
     docs: [{ id: "experiments-doc", title: "Our experiment ledger", path: join(KB_DIR, "EXPERIMENTS.md"), special: "experiments" }],
+  },
+  {
+    id: "ideas",
+    title: "Idea Selection",
+    docs: [
+      { id: "idea-roast", title: "Idea Roast (negative checklist)", path: join(KB_DIR, "IDEA-ROAST.md") },
+      { id: "rork-upstream", title: "rork-guide: provenance (third-party)", path: join(EXTERNAL, "rork-guide/UPSTREAM.md") },
+      { id: "rork-guide", title: "rork-guide: the $0 -> $10k/mo consumer-app playbook", path: join(EXTERNAL, "rork-guide/GUIDE.md") },
+    ],
   },
   {
     id: "onboarding",
@@ -67,9 +77,25 @@ const SECTIONS: Section[] = [
     docs: [{ id: "design-law", title: "Lock In Chinese DESIGN.md (law)", path: join(APPS_REPO, "apps/lockin-chinese/ios/DESIGN.md") }],
   },
   {
+    id: "motion",
+    title: "Motion",
+    docs: [
+      { id: "motion-skill", title: "Motion principles (the twelve, UI rules)", path: join(SKILLS_ENG, "motion-principles/SKILL.md") },
+    ],
+  },
+  {
     id: "aso",
-    title: "ASO",
-    docs: [{ id: "aso-lockin", title: "Lock In Chinese ASO playbook", path: join(PLAYBOOKS, "aso-lockin-chinese.md") }],
+    title: "ASO & Localization",
+    docs: [
+      { id: "aso-lockin", title: "Lock In Chinese ASO playbook", path: join(PLAYBOOKS, "aso-lockin-chinese.md") },
+      { id: "aso-vibe-upstream", title: "vibe-aso: provenance (third-party, MIT)", path: join(EXTERNAL, "vibe-aso/UPSTREAM.md") },
+      { id: "aso-vibe-map", title: "vibe-aso: six-phase map + cross-phase laws", path: join(EXTERNAL, "vibe-aso/SKILL.md") },
+      { id: "aso-vibe-keywords", title: "vibe-aso: keyword research (phase 1)", path: join(EXTERNAL, "vibe-aso/reference/keyword-research.md") },
+      { id: "aso-vibe-metadata", title: "vibe-aso: 50-locale metadata (phase 2)", path: join(EXTERNAL, "vibe-aso/reference/metadata.md") },
+      { id: "aso-vibe-screenshots", title: "vibe-aso: localized screenshots (phase 3)", path: join(EXTERNAL, "vibe-aso/reference/screenshots.md") },
+      { id: "aso-vibe-pricing", title: "vibe-aso: worldwide pricing (phase 4)", path: join(EXTERNAL, "vibe-aso/reference/pricing.md") },
+      { id: "aso-vibe-inapp", title: "vibe-aso: in-app localization (phase 5)", path: join(EXTERNAL, "vibe-aso/reference/app-localization.md") },
+    ],
   },
   {
     id: "shipping",
@@ -91,6 +117,14 @@ const SECTIONS: Section[] = [
       { id: "submission-gate", title: "Submission playbook (the gate)", path: join(PLAYBOOKS, "app-store-submission.md") },
       { id: "rej-family-controls", title: "Evidence: 2.5.1 Family Controls (2026-08-04)", path: join(APPS_REPO, "apps/lockin-chinese/docs/review/2026-08-04-family-controls-rejection.md") },
       { id: "rej-skip-trial", title: "Evidence: 3.1.2(c) skip-trial toggle (2026-08-12)", path: join(APPS_REPO, "apps/lockin-chinese/docs/review/2026-08-12-skip-trial-toggle-rejection.md") },
+      { id: "aso-vibe-submit", title: "vibe-aso: ASC field checklist, API vs manual (third-party)", path: join(EXTERNAL, "vibe-aso/reference/submission-checklist.md") },
+    ],
+  },
+  {
+    id: "paid-ua",
+    title: "Paid UA",
+    docs: [
+      { id: "ua-skills-upstream", title: "ua-skills: notes on a third-party paid-growth pack (link only)", path: join(EXTERNAL, "ua-skills/UPSTREAM.md") },
     ],
   },
   {
