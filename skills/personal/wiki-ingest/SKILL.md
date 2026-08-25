@@ -44,3 +44,6 @@ the full index in context - never mechanical extraction.
 - Never touch hermes state (`~/.hermes/**`).
 - When new material contradicts a page, follow SCHEMA.md's update
   policy: keep both positions with dates, mark the contradiction.
+- The ax write-guard hook blocks the Write/Edit tools under `~/wiki`;
+  write vault files via shell (`tee`/heredoc), or run with
+  `ALLOW_MAIN_WRITE=1` in the session environment.
