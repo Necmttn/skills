@@ -12,17 +12,20 @@ writes pages - a curator (/wiki-ingest) makes the editorial call.
 
 ## Window
 
-1. Read `~/wiki/inbox/.harvest-checkpoint.json`. If `last_harvested_at`
+1. Orient first: read `~/wiki/SCHEMA.md`, then `~/wiki/index.md`, then
+   the last ~20 lines of `~/wiki/log.md` - the same protocol every
+   wiki writer follows.
+2. Read `~/wiki/inbox/.harvest-checkpoint.json`. If `last_harvested_at`
    exists, harvest from there to now. If missing: last 7 days. Cap any
    gap at 14 days and say so in the report.
-2. Update the checkpoint ONLY after a successful run, writing BOTH
+3. Update the checkpoint ONLY after a successful run, writing BOTH
    `last_harvested_at` (ISO-8601 local) and `last_harvested_epoch`
    (`date +%s` integer - the scheduler guard depends on it).
 
 ## Procedure
 
-1. Load the dedup baseline: every slug in `~/wiki/index.md` plus all
-   frontmatter `aliases:` values (`rg -N "^aliases:" ~/wiki -g '!raw/**'`).
+1. Load the dedup baseline from the index you already read: every slug
+   plus all frontmatter `aliases:` values (`rg -N "^aliases:" ~/wiki -g '!raw/**'`).
 2. Sweep the window's coding activity with ax, multiple angles:
    - `ax sessions around <date>` for each active day - what was worked on
    - `ax recall "<candidate term>" --scope=all` to test recurrence of
@@ -59,3 +62,6 @@ writes pages - a curator (/wiki-ingest) makes the editorial call.
   never `log.md`, never `raw/`.
 - Never `git commit` in `~/wiki`.
 - 3-7 briefs per run maximum - propose the strongest, not everything.
+- The ax write-guard hook blocks the Write/Edit tools under `~/wiki`;
+  write vault files via shell (`tee`/heredoc), or run with
+  `ALLOW_MAIN_WRITE=1` in the session environment.
