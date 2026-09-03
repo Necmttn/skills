@@ -1,6 +1,6 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge; every run gets its own herdr session (`fleet-<epic>`, torn down in one stop) and a JSONL CloudEvents ledger that `fleet-state.py` renders into the orchestrator's per-wake view. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge; every run gets its own herdr session (`fleet-<epic>`, torn down in one stop) and a JSONL CloudEvents ledger that `fleet state` renders into the orchestrator's per-wake view. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
 ---
 
 # Fleet Ship - parallel herdr orchestration
@@ -50,9 +50,11 @@ build mid-compile.
    EVERY command that touches a fleet resource carries the prefix `herdr --session fleet-<epic> …`
    (remote: `ssh <host> 'herdr --session fleet-<epic> …'`; the same session name on every machine).
    The ledger is `docs/superpowers/fleet-runs/<epic>.jsonl` in the target repo, written ONLY through
-   `scripts/fleet-log.sh` - see 'Ledger + state view'. First three events, in this order:
-   `fleet-log.sh <ledger> fleet.run.started <epic> session=fleet-<epic> runmap=<url> kanban=<url>`,
-   `fleet-log.sh <ledger> fleet.resource.minted session:fleet-<epic> label=fleet-<epic>`, and one
+   the `fleet` CLI - `fleet` below means `bun ~/.claude/skills/fleet-ship/scripts/fleet.ts` (TypeScript on
+   Effect 4; `bun install` once in that `scripts/` dir; `alias fleet='bun ~/.claude/skills/fleet-ship/scripts/fleet.ts'`
+   per shell) - see 'Ledger + state view'. First three events, in this order:
+   `fleet log <ledger> fleet.run.started <epic> session=fleet-<epic> runmap=<url> kanban=<url>`,
+   `fleet log <ledger> fleet.resource.minted session:fleet-<epic> label=fleet-<epic>`, and one
    `fleet.policy.set` per routing/steering rule in force (lane file version included).
 
 ### Merge under claim - the ONLY way anything lands on main
@@ -323,7 +325,7 @@ when the board is unreachable:
 - **At fleet start** record the event cursor in the ledger (last `seq` from `fleetctl events --since 0`,
   or the cursor the ledger already holds) AND still set the fallback file
   `SIGNALS=/tmp/fleet-<epic>.signals` (one per run): one event carries both -
-  `fleet-log.sh <ledger> fleet.cursor.advanced fleetboard events=<seq> signals=$SIGNALS`.
+  `fleet log <ledger> fleet.cursor.advanced fleetboard events=<seq> signals=$SIGNALS`.
 - **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR
   errored — the pane pushes its lifecycle event: DONE (work committed) →
   `fleetctl event BUILT --machine <slug> --chunk <chunk-id> --gist "<gist>"`; BLOCKED/ERROR have no
@@ -341,7 +343,7 @@ when the board is unreachable:
   `ssh <host> 'cat <signals-path>'`) as the fallback path — lines from board-unreachable panes — and
   reconcile them the same way; any evented/signaled pane still open after its chunk closed =
   archive+close now.
-- **Orphan sweep (every wake):** the `live` block of `fleet-state.py --live` does the cross-check for you
+- **Orphan sweep (every wake):** the `live` block of `fleet state --live` does the cross-check for you
   (`orphan pane` = live pane with no chunk event; `gone` = chunk whose pane vanished before a terminal stage) -
   a pane whose chunk is already merged/abandoned, or that appears in the event log (or fallback $SIGNALS)
   but has no live waiter, is an orphan: archive-then-close it and re-arm whatever should have caught it.
@@ -427,10 +429,10 @@ Each transition below emits its lifecycle stage to the event log (`fleetctl even
 Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` · commit+report=`BUILT`
 (pane-side, via its SIGNAL STEP) · cross-review-started=`IN_REVIEW` · consensus-pass=`GATED` ·
 squash-merge=`MERGED` · tracer-report=`DOGFOODED`. **Mirror every transition to the ledger in the same
-wake** - `fleet-log.sh <ledger> fleet.chunk.<stage> <slug>/<chunk-id> pane=<pane_id> engine=<kind>
+wake** - `fleet log <ledger> fleet.chunk.<stage> <slug>/<chunk-id> pane=<pane_id> engine=<kind>
 pr=<url> commit=<sha> gist="<one line>"` (stage lowercase; only the fields that changed). The board
-is the shared truth, the ledger is the offline one - `fleet-state.py` reads the ledger, not the board.
-1. **Map FIRST.** `python3 scripts/fleet-state.py <ledger> --live` + `git worktree list`. Never spawn into an occupied worktree or
+is the shared truth, the ledger is the offline one - `fleet state` reads the ledger, not the board.
+1. **Map FIRST.** `fleet state <ledger> --live` + `git worktree list`. Never spawn into an occupied worktree or
    duplicate work a user/agent already started. (Live lesson: this bit us.)
 2. **Worktree** (`superpowers:using-git-worktrees`): `git worktree add .claude/worktrees/<chunk> -b feat/<chunk> origin/main`
    **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
@@ -585,9 +587,9 @@ A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcrip
 Per chunk, right after merge (step 7), BEFORE closing:
 1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
 2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <machine-slug>/<chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
-3. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet-log.sh <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
+3. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet log <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
 4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority) and render the ledger
-   (`fleet-state.py docs/superpowers/fleet-runs/<epic>.jsonl`); use `herdr session attach fleet-<epic>` for
+   (`fleet state docs/superpowers/fleet-runs/<epic>.jsonl`); use `herdr session attach fleet-<epic>` for
    a local live re-entry, or `herdr --remote <host> --session fleet-<epic>` for remote UI attach WHILE the
    session still exists (teardown deletes it); never use `--remote` to drive subcommands.
 **Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
@@ -608,11 +610,11 @@ memory-driven — the same law that already governs worktrees ("housekeep only w
 tracked by exact path") extended to every herdr resource:
 - **Mint = record.** Every command that mints a herdr resource - the session, `workspace create`,
   `tab create`, `pane split`, `agent start` - appends one event IN THE SAME wake, never batched:
-  `fleet-log.sh <ledger> fleet.resource.minted <session|workspace|tab|pane|agent>:<id> label=<label>`.
+  `fleet log <ledger> fleet.resource.minted <session|workspace|tab|pane|agent>:<id> label=<label>`.
   The empty root SHELL pane a `tab create` (and a `workspace create`) ships (`.result.root_pane.pane_id`) gets its own event until closed.
   No minted event = not yours = you may not close it. Closing appends `fleet.resource.closed <same subject>`.
 - **Teardown reads the ledger, never the sidebar.** At run end (and before any rotation handoff):
-  `scripts/fleet-teardown.sh <ledger> --epic <epic> --session fleet-<epic>` (dry-run: every open
+  `fleet teardown <ledger> --epic <epic> --session fleet-<epic>` (dry-run: every open
   resource and its action), then add `--execute`. It archives-then-closes each pane by exact id, closes
   tabs and workspaces, verifies no recorded pane survives, THEN `session stop` + `session delete`
   fleet-<epic> - one stop removes every remaining surface - and appends `fleet.run.teardown closed=<n>`.
@@ -621,7 +623,9 @@ tracked by exact path") extended to every herdr resource:
 ### Ledger + state view (2026-09-03 - the orchestrator reads ONE view, never scans panes)
 The ledger is `docs/superpowers/fleet-runs/<epic>.jsonl`: JSON Lines, one **CloudEvents 1.0** record per
 line (`specversion` `id` `source` `type` `time` `subject` `data`) - `jq`, DuckDB `read_json_auto`, and ax
-all read it without a custom parser. Never hand-write a line; `scripts/fleet-log.sh <ledger> <type>
+all read it without a custom parser. The tooling is `scripts/fleet.ts` (Effect 4, `effect/unstable/cli`);
+its `Herdr` service (`scripts/src/herdr/Herdr.ts`) is the seam: `HerdrCli` shells out to `herdr --session …`
+today, a `HerdrSdk` layer over `@herdr/sdk` replaces it when the SDK ships, nothing above changes. Never hand-write a line; `fleet log <ledger> <type>
 <subject|-> [key=value …]` mints id + time (ints and true/false are coerced, everything else is a string).
 `source` defaults to `fleet/<epic>/<host>`; set `FLEET_SOURCE=fleet/<epic>/<slug>` once per machine.
 Type vocabulary (all `fleet.*`, the writer rejects anything else):
@@ -634,14 +638,14 @@ Type vocabulary (all `fleet.*`, the writer rejects anything else):
 | `attn.opened` · `attn.closed` | `<slug>/<chunk-id>` | `ask` |
 | `cursor.advanced` | `fleetboard` | `events` `signals` |
 | `note` | free | `text` |
-**The view:** `python3 scripts/fleet-state.py <ledger> --live [--session fleet-<epic>] [--tail N]`
+**The view:** `fleet state <ledger> --live [--session fleet-<epic>] [--tail N]`
 renders five blocks - header (epic, session, last action, malformed count, policies, cursor) · chunks
 (stage, pane, LIVE status, engine, PR, age, gist; stage = last `chunk.*` event per subject) · checklist
 (counts per stage + a `next:` line) · open items (attn, resources still minted) · live (orphan panes,
 gone panes) · action log tail. Without `--live` it is ledger-only and works with no server up. A
 malformed line is counted in the header and printed to stderr, never swallowed.
 **Protocol - two rules:** the FIRST command of every wake is the view with `--live`; the LAST command of
-every wake is one `fleet-log.sh` event. Read a pane tail only for a row the view flags (`gone`, `orphan`,
+every wake is one `fleet log` event. Read a pane tail only for a row the view flags (`gone`, `orphan`,
 `blocked`, `error`). The rotation handoff pastes the view verbatim as its state snapshot.
 **Commit cadence:** the ledger is git-tracked and append-only; commit it with the housekeeping commit
 of each merge, not per line.
@@ -654,13 +658,13 @@ of each merge, not per line.
 - **Exact ids only** — never pattern-match labels (`fleet:*`) to find things to close; concurrent
   fleets share the namespace (same live lesson as the worktree cleanup regex).
 - **Rotation-safe:** the handoff doc carries the view's `open resources` block; the successor inherits the
-  teardown obligation with the resources and re-verifies them (`fleet-state.py --live`) like every other
+  teardown obligation with the resources and re-verifies them (`fleet state --live`) like every other
   snapshot field.
 
 ## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
 Your state lives in the **ledger + kanban + git**, NOT your context. So you survive compaction and a fresh
 orchestrator can resume from those alone.
-- **Per wake, re-derive from sources of truth** - FIRST `python3 scripts/fleet-state.py <ledger> --live`
+- **Per wake, re-derive from sources of truth** - FIRST `fleet state <ledger> --live`
   (one view: chunks, checklist, open items, orphans, action log), then `gh project item-list` and
   `git log` only for what the view cannot answer - do NOT trust memory, and do NOT scan panes.
 - **Read pane *tails* only** (`agent read --lines 30`), never full transcripts. Never `cat` a subagent
@@ -668,7 +672,7 @@ orchestrator can resume from those alone.
 - **Offload bulk to files:** diffs via `review-package`, pane reports + briefs as files, review verdicts
   returned terse. Read the *verdict*, not the diff.
 - **Each wake is small + stateless:** render the view → gate (`/review-all`) → merge → move card → spawn
-  next → append one ledger event (`fleet-log.sh`) → done. Don't accumulate; the board + ledger are the memory.
+  next → append one ledger event (`fleet log`) → done. Don't accumulate; the board + ledger are the memory.
 - **Prompt hygiene when parking (2026-07-10):** never leave unsubmitted draft text on your prompt line when
   you yield/idle - supervisors and humans steer you through that line, and a watchdog that finds text there
   must defer its message (live lesson: a starvation steering was correctly deferred for a full cycle because
