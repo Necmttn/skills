@@ -354,18 +354,20 @@ ssh <host> 'herdr agent read <name> --source visible --lines 30'   # required fo
 ## Archive a pane result before close (housekeeping)
 ```sh
 # NAME is the bare local herdr target; REPORT_NAME is <machine-slug>/<chunk-id>.
-# Run each herdr command on the pane's server; from elsewhere use ssh <host> 'herdr ...'.
-# 1. capture (name-addressed) → the git-tracked run archive
+# Every fleet resource lives in the run's session: H="herdr --session fleet-$EPIC" (remote: ssh <host> "$H ...").
+# LEDGER=docs/superpowers/fleet-runs/$EPIC.jsonl; LOG=~/.claude/skills/fleet-ship/scripts/fleet-log.sh
+# 1. capture (name-addressed) → the git-tracked run archive (0.8: agent read prints plain text)
 mkdir -p docs/superpowers/fleet-runs
 { echo "## $REPORT_NAME"; echo "PR #$PR · $COMMIT · gate: $VERDICT"; echo;
-  herdr agent read "$NAME" --source recent --lines 400 \
-    | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])'; echo;
+  $H agent read "$NAME" --source recent --lines 400; echo;
 } >> "docs/superpowers/fleet-runs/$EPIC.md"
-git add "docs/superpowers/fleet-runs/$EPIC.md" && git commit -m "chore(fleet): archive $REPORT_NAME result"
+$LOG "$LEDGER" fleet.chunk.archived "$REPORT_NAME" pr="$PR" commit="$COMMIT"
+git add "docs/superpowers/fleet-runs/$EPIC.md" "$LEDGER" && git commit -m "chore(fleet): archive $REPORT_NAME result"
 # 2. THEN teardown (capture the worktree's ABSOLUTE path before removing it)
-PID=$(herdr agent get "$NAME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["pane_id"])')
+PID=$($H agent get "$NAME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["pane_id"])')
 WT="$(cd ".claude/worktrees/$NAME" && pwd)"
-herdr pane close "$PID"; git worktree remove .claude/worktrees/$NAME --force; git branch -D feat/$NAME
+$H pane close "$PID"; $LOG "$LEDGER" fleet.resource.closed "pane:$PID"
+git worktree remove .claude/worktrees/$NAME --force; git branch -D feat/$NAME
 # 3. DerivedData sweep - each Xcode build in a worktree mints ~/Library/Developer/Xcode/DerivedData/<App>-<hash>,
 #    5-9GB per app; unswept they pile up (394GB / 80 dirs, live lesson 2026-07-17).
 #    Match ONLY by exact WorkspacePath inside the removed worktree - never by app-name pattern
@@ -376,27 +378,42 @@ for p in ~/Library/Developer/Xcode/DerivedData/*/info.plist; do
   esac
 done
 ```
-Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) or local
-`herdr session attach $NAME`; for a remote interactive re-entry use
-`herdr --remote <host> --session <session>` (UI attach only, never a driving-command prefix).
+Restore: `cat docs/superpowers/fleet-runs/$EPIC.md` (authority) + `fleet-state.py $LEDGER`, or local
+`herdr session attach fleet-$EPIC` while the session still exists; for a remote interactive re-entry use
+`herdr --remote <host> --session fleet-$EPIC` (UI attach only, never a driving-command prefix).
 
 ## Teardown
 
 ```sh
-scripts/fleet-teardown.sh <ledger-path> --epic <epic> [--archive-dir docs/superpowers/fleet-runs] [--execute]
+scripts/fleet-teardown.sh <ledger.jsonl> --epic <epic> --session fleet-<epic> [--archive-dir docs/superpowers/fleet-runs] [--execute]
 ```
 
 | Flag | Meaning |
 |---|---|
 | `--epic <epic>` | Required archive filename stem. |
+| `--session <name>` | The run's herdr session; every herdr call is prefixed with it, and it is stopped + deleted last. |
 | `--archive-dir <dir>` | Capture destination; defaults to `docs/superpowers/fleet-runs`. |
-| `--execute` | Archive and close exact ledger resources. Without it, the script only prints its dry-run plan. |
+| `--execute` | Archive and close exact ledger resources. Without it, the script only prints its dry-run plan and never calls herdr. |
 
-The ledger grammar is `RES <tab|pane|agent|workspace> <id> <label>` for minted resources,
-`CLOSED <id>` after each resource is reconciled, and
-`TEARDOWN-DONE <n closed> <timestamp>` after teardown verifies no recorded panes or agents survive.
-Re-running the dry-run against the last run's ledger is the teardown smoke test; every resource should
-show `already-closed`.
+The script reads `fleet.resource.minted` minus `fleet.resource.closed` (subject `<type>:<id>`), appends
+`fleet.resource.closed` per reconciled resource and `fleet.run.teardown closed=<n>` after it verifies no
+recorded pane or agent survives. Order: panes (capture first) → tabs → workspaces → survivors check →
+session stop + delete. Re-running the dry-run against the last run's ledger is the teardown smoke test;
+every resource should show `already-closed`.
+
+## Ledger recipes (JSONL, CloudEvents 1.0 - see SKILL 'Ledger + state view')
+
+```sh
+LEDGER=docs/superpowers/fleet-runs/<epic>.jsonl
+python3 scripts/fleet-state.py "$LEDGER" --live                # the per-wake view (fleet session from the ledger)
+python3 scripts/fleet-state.py "$LEDGER" --tail 50            # ledger-only, no server needed
+jq -r 'select(.type|startswith("fleet.chunk.")) | [.time,.subject,.type,.data.gist//""] | @tsv' "$LEDGER"
+jq -r 'select(.type=="fleet.resource.minted") | .subject' "$LEDGER" | sort > /tmp/m; \
+  jq -r 'select(.type=="fleet.resource.closed") | .subject' "$LEDGER" | sort > /tmp/c; comm -23 /tmp/m /tmp/c   # still open
+jq -c 'select(.subject=="<slug>/<chunk-id>")' "$LEDGER"      # one chunk's full history
+```
+
+Self-test for the three scripts: `python3 scripts/test-fleet-ledger.py` (fake herdr on PATH, 38 assertions).
 
 ## Kanban (GitHub Project v2 via gh; needs `project` scope)
 ```sh
@@ -412,7 +429,8 @@ Move a card: re-run `item-edit` with the target Status option id (Todo→In Prog
 ## Tandem orchestrator brief (codex, max reasoning - spawn into the orchestrator tab)
 > You are the TANDEM co-orchestrator for fleet <epic>. The orchestrator is agent <orchestrator-name>
 > (fable). Your job, on a ~10 min loop: (1) WATCHDOG - read the orchestrator pane tail
-> (herdr agent read <orchestrator-name> --lines 40), the run ledger at <ledger-path>, and herdr agent list;
+> (herdr agent read <orchestrator-name> --lines 40), the state view (python3 scripts/fleet-state.py
+> <ledger-path> --live), and herdr --session fleet-<epic> agent list;
 > flag starvation (no wake progress AND no new commits on fleet branches - always check commits before
 > flagging), context bloat past the rotation threshold, parked drafts blocking steering (log the draft,
 > then follow the submit protocol), dead waiters/monitor. On a finding: send ONE terse message to the
@@ -435,9 +453,9 @@ fallback), local pane name `steward:<epic>`, into that machine's `fleet:<epic>@<
 ONE tab per machine - the steward shares its machine's fleet tab rather than minting its own, unlike the
 Mac orchestrator's dedicated pane). Long briefs
 travel as files (hard rule): write this template to the machine, spawn with a short pointer, e.g.
-`ssh <host> 'herdr pane split <a-fleet-tab-pane> --cwd <repo> --no-focus'` then `ssh <host> 'herdr agent start
-steward:<epic> --kind claude --pane <new-pane> -- --model fable --dangerously-skip-permissions'` (0.8.0
-two-step) then `agent prompt` "Read <brief path> and execute it fully". This template IS a
+`ssh <host> 'herdr --session fleet-<epic> pane split <a-fleet-tab-pane> --cwd <repo> --no-focus'` then
+`ssh <host> 'herdr --session fleet-<epic> agent start steward:<epic> --kind claude --pane <new-pane> --
+--model fable --dangerously-skip-permissions'` (0.8.0 two-step, inside the run's session on that machine) then `agent prompt` "Read <brief path> and execute it fully". This template IS a
 CONTEXT + discipline contract - send it whole, placeholders filled; do not freehand it.
 > You are the STEWARD for machine <slug> in fleet <epic> - the on-demand per-machine orchestrator
 > (read fleet-ship SKILL.md, esp. 'Steward mode' + 'Per-chunk loop'). Register on fleetboard as a new
@@ -483,8 +501,9 @@ Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
 ## Goal (pointer, not restated)
 Run-map issue: <url>
 ## State snapshot (as of <ts>, derived fresh - not memory)
+<paste `python3 scripts/fleet-state.py <ledger> --live` output verbatim - chunks, checklist, open items, live, log tail>
 - Machine: <slug> (role: primary orchestrator | steward - stewards always fill this)
-- Ledger: <path> - last line: "<verbatim>"
+- Ledger: <path> (session fleet-<epic>) - last event: "<verbatim>"
 - Kanban: <url> - Todo:N InProgress:N Done:N
 - Fleetboard claims held: <list|none> (steward: also claims just released at exit)
 - Hold-tagged chunks left queued (never spawned - honor the hold): <list|none>

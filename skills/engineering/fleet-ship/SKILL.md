@@ -1,6 +1,6 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge; every run gets its own herdr session (`fleet-<epic>`, torn down in one stop) and a JSONL CloudEvents ledger that `fleet-state.py` renders into the orchestrator's per-wake view. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
 ---
 
 # Fleet Ship - parallel herdr orchestration
@@ -41,6 +41,19 @@ build mid-compile.
    user's typed answer on your item after ringing.
 6. **Name your orchestrator pane/tab** (`herdr tab create --label "orchestrator:<epic>"`) so
    `herdr agent list` yields a truthful census.
+7. **Start the run's own herdr session + open its ledger.** One session per fleet run, named
+   `fleet-<epic>`. `herdr session list` first - reuse it if it is already running; otherwise start it
+   headless: `nohup herdr --session fleet-<epic> server </dev/null >/dev/null 2>&1 &` (no `setsid` - macOS
+   has none; probed 2026-09-03, the server survives the spawning shell), then poll
+   `herdr --session fleet-<epic> agent list` until it answers (~2s). YOUR orchestrator pane stays in the
+   default session (the human sees it without attaching; `session stop` can never kill it). From here on
+   EVERY command that touches a fleet resource carries the prefix `herdr --session fleet-<epic> …`
+   (remote: `ssh <host> 'herdr --session fleet-<epic> …'`; the same session name on every machine).
+   The ledger is `docs/superpowers/fleet-runs/<epic>.jsonl` in the target repo, written ONLY through
+   `scripts/fleet-log.sh` - see 'Ledger + state view'. First three events, in this order:
+   `fleet-log.sh <ledger> fleet.run.started <epic> session=fleet-<epic> runmap=<url> kanban=<url>`,
+   `fleet-log.sh <ledger> fleet.resource.minted session:fleet-<epic> label=fleet-<epic>`, and one
+   `fleet.policy.set` per routing/steering rule in force (lane file version included).
 
 ### Merge under claim - the ONLY way anything lands on main
 Merge-worthiness = the FULL fleet-ship workflow passed WHEREVER the chunk ran (plan → cheap-lane build →
@@ -260,6 +273,11 @@ local herdr names/labels bare, but write `<slug>/<chunk-id>` on every surface th
   each wake.
 - **The invariant the user relies on:** everything visible is working or queued; `✋`/`❌` means "needs me"
   (mirrored on the fleetboard attention list); everything else is fine by construction.
+- **The fleet lives in its own session, so the default sidebar shows only your orchestrator tab.** The
+  human watches the run with `herdr session attach fleet-<epic>` in a second terminal (or
+  `herdr --remote <host> --session fleet-<epic>` for another machine). The sidebar keys (`prefix+.`
+  next agent), herdr-bar and `agent list` never cross sessions - which is exactly why the human's
+  interactive session stays clean. Say so in the run map so nobody hunts for panes in the wrong session.
 - **Sweep duty (every wake):** reconcile every fleet pane's label against its true state, refresh tab
   counts, and archive+close any pane whose job ended. Unnamed/mislabeled panes in a fleet tab: fix on sight.
 
@@ -304,7 +322,8 @@ when the board is unreachable:
   bare id silently match nothing); a bad stage exits non-zero listing the valid stages.
 - **At fleet start** record the event cursor in the ledger (last `seq` from `fleetctl events --since 0`,
   or the cursor the ledger already holds) AND still set the fallback file
-  `SIGNALS=/tmp/fleet-<epic>.signals` (one per run; note both in the ledger).
+  `SIGNALS=/tmp/fleet-<epic>.signals` (one per run): one event carries both -
+  `fleet-log.sh <ledger> fleet.cursor.advanced fleetboard events=<seq> signals=$SIGNALS`.
 - **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR
   errored — the pane pushes its lifecycle event: DONE (work committed) →
   `fleetctl event BUILT --machine <slug> --chunk <chunk-id> --gist "<gist>"`; BLOCKED/ERROR have no
@@ -318,11 +337,12 @@ when the board is unreachable:
 - **Every orchestrator wake reads the EVENT LOG first** — `fleetctl events --since <cursor>` (filter
   `--machine <slug>` / `--chunk` as needed) — and reconciles BEFORE trusting waiters: BUILT → gate it
   (even if the waiter never fired); a BLOCKED/ERROR attention item → read REPORT.md, unblock or re-spawn;
-  then advance the cursor in the ledger. THEN read each machine's $SIGNALS (remote via
+  then advance the cursor in the ledger (`fleet.cursor.advanced`). THEN read each machine's $SIGNALS (remote via
   `ssh <host> 'cat <signals-path>'`) as the fallback path — lines from board-unreachable panes — and
   reconcile them the same way; any evented/signaled pane still open after its chunk closed =
   archive+close now.
-- **Orphan sweep (every wake):** cross-check fleet-tab panes (`herdr agent list`) against the ledger/kanban —
+- **Orphan sweep (every wake):** the `live` block of `fleet-state.py --live` does the cross-check for you
+  (`orphan pane` = live pane with no chunk event; `gone` = chunk whose pane vanished before a terminal stage) -
   a pane whose chunk is already merged/abandoned, or that appears in the event log (or fallback $SIGNALS)
   but has no live waiter, is an orphan: archive-then-close it and re-arm whatever should have caught it.
 - Events COMPLEMENT the two spines: waiter = fast wake on done; monitor = liveness; the **event log = the
@@ -406,8 +426,11 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
 Each transition below emits its lifecycle stage to the event log (`fleetctl event <STAGE> …` - see
 Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` · commit+report=`BUILT`
 (pane-side, via its SIGNAL STEP) · cross-review-started=`IN_REVIEW` · consensus-pass=`GATED` ·
-squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
-1. **Map FIRST.** `herdr agent list` + `git worktree list`. Never spawn into an occupied worktree or
+squash-merge=`MERGED` · tracer-report=`DOGFOODED`. **Mirror every transition to the ledger in the same
+wake** - `fleet-log.sh <ledger> fleet.chunk.<stage> <slug>/<chunk-id> pane=<pane_id> engine=<kind>
+pr=<url> commit=<sha> gist="<one line>"` (stage lowercase; only the fields that changed). The board
+is the shared truth, the ledger is the offline one - `fleet-state.py` reads the ledger, not the board.
+1. **Map FIRST.** `python3 scripts/fleet-state.py <ledger> --live` + `git worktree list`. Never spawn into an occupied worktree or
    duplicate work a user/agent already started. (Live lesson: this bit us.)
 2. **Worktree** (`superpowers:using-git-worktrees`): `git worktree add .claude/worktrees/<chunk> -b feat/<chunk> origin/main`
    **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
@@ -417,27 +440,30 @@ squash-merge=`MERGED` · tracer-report=`DOGFOODED`.
    `fleetctl join --name <slug>` and keep both identities: local herdr name `<chunk-id>`; external/reporting
    name `<slug>/<chunk-id>`. Spawn (0.8.0 two-step - see Herdr backchannel primitives): get a pane in the
    fleet tab cwd'd at the worktree - the fleet tab's fresh root pane for the first chunk
-   (`tab create … --cwd <worktree>` returns `result.root_pane`), else `herdr pane split <a-fleet-tab-pane>
+   (`tab create … --cwd <worktree>` returns the pane OBJECT `result.root_pane`; its id is `.result.root_pane.pane_id`), else `herdr pane split <a-fleet-tab-pane>
    --direction down --cwd <worktree> --no-focus` - then `herdr agent start <chunk-id> --kind <kind>
    --pane <pane_id> -- <engine args>` (`--kind` names the engine executable: claude|codex|grok|pi|…; the
    argv after `--` is its flags only). For a non-primary machine, execute the same commands there:
    `ssh <host> 'herdr pane split … && herdr agent start …'`.
-   The remote agent NAME is still the bare chunk id; append the RES ledger line for the new pane (and any tab
-   you just created) in this same wake (see Housekeeping: Resource ledger); set its local pane label too
+   The remote agent NAME is still the bare chunk id; append `fleet.resource.minted pane:<pane_id>` (and
+   `tab:<id>` for any tab you just created) plus `fleet.chunk.spawned` in this same wake (see 'Ledger +
+   state view'); set its local pane label too
    (`ssh <host> 'herdr pane rename <pane_id> "▶ <chunk-id>"'` - see Sidebar legibility). Every later
    remote read/prompt/wait/rename/close follows the same host-explicit SSH form. Never use `herdr --remote` for
    driving; it is UI-attach only.
-   Placement hierarchy (once per fleet run, not per chunk):
-   **workspace = the project/space** (existing, human-labeled) → **tab 1 = the human's interactive sessions
-   (NEVER spawn there)** → **one fleet tab per run**: `herdr tab create --workspace <ws-id> --label
-   "fleet:<epic>" --no-focus` on primary; `ssh <host> 'herdr tab create --workspace <ws-id> --label
-   "fleet:<epic>@<slug>" --no-focus'` on a non-primary machine. Keep its `tab_id`, and spawn EVERY chunk
-   pane with `--tab <tab_id>`. The human's sidebar then reads: space → machine-identifying fleet tab →
-   bare named chunk panes. `herdr tab rename` retrofits.
+   Placement hierarchy (once per fleet run, not per chunk) - all of it inside the run's own session, so
+   every command below is `herdr --session fleet-<epic> …` (remote: `ssh <host> 'herdr --session
+   fleet-<epic> …'`): **session = the fleet run** (Setup step 7) → **workspace = `<epic>`**: a fresh
+   session has NO workspaces, so mint one (`workspace create --cwd <repo> --label <epic>`; keep its id;
+   `fleet.resource.minted workspace:<id>`) → **one fleet tab per machine**: `tab create --workspace
+   <ws-id> --cwd <worktree> --label "fleet:<epic>" --no-focus` on primary, `"fleet:<epic>@<slug>"`
+   elsewhere (`fleet.resource.minted tab:<id>`). Keep its `tab_id`, and spawn EVERY chunk pane into
+   it. The human's default session is never touched - no 'tab 1' rule applies inside the fleet
+   session. `herdr tab rename` retrofits.
    **Tab hygiene (live lesson - user caught both):** (a) run `herdr tab list --workspace <ws>` on the target
    server (through SSH when remote) BEFORE creating; reuse the expected `fleet:<epic>` or
    `fleet:<epic>@<slug>` tab instead of minting a duplicate; (b) `tab create` ships an empty root SHELL pane
-   (`result.root_pane` in the create response) - in 0.8.0 that root pane is the FIRST chunk's spawn target
+   (`.result.root_pane.pane_id` in the create response - `root_pane` is an object, not an id; probed 2026-09-03) - in 0.8.0 that root pane is the FIRST chunk's spawn target
    (`agent start … --pane <root_pane>`), not waste; only close it when the tab pre-exists with agents and
    the root shell sits empty. Sweep `herdr pane list --workspace <ws>` on the same target (no stray `shell`
    panes in fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
@@ -559,10 +585,11 @@ A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcrip
 Per chunk, right after merge (step 7), BEFORE closing:
 1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
 2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <machine-slug>/<chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
-3. **THEN teardown:** `herdr pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
-4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority), use
-   `herdr session attach <name>` for a local live re-entry, or `herdr --remote <host> --session <session>`
-   for remote UI attach WHILE the session still persists; never use `--remote` to drive subcommands.
+3. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet-log.sh <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
+4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority) and render the ledger
+   (`fleet-state.py docs/superpowers/fleet-runs/<epic>.jsonl`); use `herdr session attach fleet-<epic>` for
+   a local live re-entry, or `herdr --remote <host> --session fleet-<epic>` for remote UI attach WHILE the
+   session still exists (teardown deletes it); never use `--remote` to drive subcommands.
 **Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
 Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
 **Close at COMMIT+REPORT, not at merge (2026-07-13, user rule — 11 idle panes piled up waiting out a long review queue).**
@@ -579,17 +606,46 @@ Empty tabs/panes kept surviving runs DESPITE sweep duty + archive-then-close: th
 orchestrator context and decay under compaction/rotation. Cleanup is therefore LEDGER-driven, never
 memory-driven — the same law that already governs worktrees ("housekeep only what THIS run created,
 tracked by exact path") extended to every herdr resource:
-- **Mint = record.** Every command that mints a herdr resource — `tab create`, `agent start`,
-  `pane split`, workspace create — appends one ledger line IN THE SAME wake, never batched:
-  `RES <tab|pane|agent|workspace> <id> <name/label>`. The empty root SHELL pane a `tab create` ships
-  (`result.root_pane`) gets its own RES line until closed. No RES line = not yours = you may not close it.
+- **Mint = record.** Every command that mints a herdr resource - the session, `workspace create`,
+  `tab create`, `pane split`, `agent start` - appends one event IN THE SAME wake, never batched:
+  `fleet-log.sh <ledger> fleet.resource.minted <session|workspace|tab|pane|agent>:<id> label=<label>`.
+  The empty root SHELL pane a `tab create` (and a `workspace create`) ships (`.result.root_pane.pane_id`) gets its own event until closed.
+  No minted event = not yours = you may not close it. Closing appends `fleet.resource.closed <same subject>`.
 - **Teardown reads the ledger, never the sidebar.** At run end (and before any rotation handoff):
-  list still-open RES lines → archive-then-close each pane by exact id → close tabs last → VERIFY
-  (`herdr pane list --workspace <ws>` + `tab list`: zero fleet-minted resources remain) → append
-  `TEARDOWN-DONE <n closed>` to the ledger. Run it, don't hand-roll it:
-  `scripts/fleet-teardown.sh <ledger> --epic <epic>` (dry-run), then add `--execute`.
-  `fleetctl deregister` only AFTER teardown-verify.
-- **Run wrap-up LAST (invoke the `wrap-up` skill).** Teardown closes herdr resources; wrap-up closes the
+  `scripts/fleet-teardown.sh <ledger> --epic <epic> --session fleet-<epic>` (dry-run: every open
+  resource and its action), then add `--execute`. It archives-then-closes each pane by exact id, closes
+  tabs and workspaces, verifies no recorded pane survives, THEN `session stop` + `session delete`
+  fleet-<epic> - one stop removes every remaining surface - and appends `fleet.run.teardown closed=<n>`.
+  VERIFY: `herdr session list` no longer shows `fleet-<epic>`. `fleetctl deregister` only AFTER that.
+
+### Ledger + state view (2026-09-03 - the orchestrator reads ONE view, never scans panes)
+The ledger is `docs/superpowers/fleet-runs/<epic>.jsonl`: JSON Lines, one **CloudEvents 1.0** record per
+line (`specversion` `id` `source` `type` `time` `subject` `data`) - `jq`, DuckDB `read_json_auto`, and ax
+all read it without a custom parser. Never hand-write a line; `scripts/fleet-log.sh <ledger> <type>
+<subject|-> [key=value …]` mints id + time (ints and true/false are coerced, everything else is a string).
+`source` defaults to `fleet/<epic>/<host>`; set `FLEET_SOURCE=fleet/<epic>/<slug>` once per machine.
+Type vocabulary (all `fleet.*`, the writer rejects anything else):
+| type | subject | data |
+|---|---|---|
+| `run.started` · `run.teardown` | `<epic>` | `session` `runmap` `kanban` · `closed` |
+| `policy.set` | policy name (`routing`, `steer`, `lane-file`) | `text` |
+| `resource.minted` · `resource.closed` | `session:`/`workspace:`/`tab:`/`pane:`/`agent:` + id | `label` |
+| `chunk.<stage>` (assigned spawned planned building built in_review gated merged dogfooded blocked error archived closed) | `<slug>/<chunk-id>` | `pane` `engine` `wt` `pr` `commit` `gist` - same keys `fleetctl event` posts |
+| `attn.opened` · `attn.closed` | `<slug>/<chunk-id>` | `ask` |
+| `cursor.advanced` | `fleetboard` | `events` `signals` |
+| `note` | free | `text` |
+**The view:** `python3 scripts/fleet-state.py <ledger> --live [--session fleet-<epic>] [--tail N]`
+renders five blocks - header (epic, session, last action, malformed count, policies, cursor) · chunks
+(stage, pane, LIVE status, engine, PR, age, gist; stage = last `chunk.*` event per subject) · checklist
+(counts per stage + a `next:` line) · open items (attn, resources still minted) · live (orphan panes,
+gone panes) · action log tail. Without `--live` it is ledger-only and works with no server up. A
+malformed line is counted in the header and printed to stderr, never swallowed.
+**Protocol - two rules:** the FIRST command of every wake is the view with `--live`; the LAST command of
+every wake is one `fleet-log.sh` event. Read a pane tail only for a row the view flags (`gone`, `orphan`,
+`blocked`, `error`). The rotation handoff pastes the view verbatim as its state snapshot.
+**Commit cadence:** the ledger is git-tracked and append-only; commit it with the housekeeping commit
+of each merge, not per line.
+- **Run wrap-up LAST (invoke the `wrap-up` skill).** Teardown closes herdr resources and the session; wrap-up closes the
   RUN: one `follow-up`-labeled issue per unresolved concern in the run archive's REPORT sections (linked to
   the chunk's PR), UAT checkboxes appended to the scope's open `uat` issue (TestFlight build numbers to
   install, shipped flows to smoke on device, regressions to confirm dead - one live UAT issue per scope),
@@ -597,20 +653,22 @@ tracked by exact path") extended to every herdr resource:
   deregister - it is done when its loose ends are tickets and its human checks are queued.
 - **Exact ids only** — never pattern-match labels (`fleet:*`) to find things to close; concurrent
   fleets share the namespace (same live lesson as the worktree cleanup regex).
-- **Rotation-safe:** the handoff doc carries the open RES lines; the successor inherits the teardown
-  obligation with the resources and re-verifies them like every other snapshot field.
+- **Rotation-safe:** the handoff doc carries the view's `open resources` block; the successor inherits the
+  teardown obligation with the resources and re-verifies them (`fleet-state.py --live`) like every other
+  snapshot field.
 
 ## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
 Your state lives in the **ledger + kanban + git**, NOT your context. So you survive compaction and a fresh
 orchestrator can resume from those alone.
-- **Per wake, re-derive from sources of truth** (`cat <ledger>`, `gh project item-list`, `git log`,
-  `herdr agent list`) - do NOT trust memory.
+- **Per wake, re-derive from sources of truth** - FIRST `python3 scripts/fleet-state.py <ledger> --live`
+  (one view: chunks, checklist, open items, orphans, action log), then `gh project item-list` and
+  `git log` only for what the view cannot answer - do NOT trust memory, and do NOT scan panes.
 - **Read pane *tails* only** (`agent read --lines 30`), never full transcripts. Never `cat` a subagent
   `.output` transcript into context.
 - **Offload bulk to files:** diffs via `review-package`, pane reports + briefs as files, review verdicts
   returned terse. Read the *verdict*, not the diff.
-- **Each wake is small + stateless:** read tail → gate (`/review-all`) → merge → move card → spawn next →
-  append one ledger line → done. Don't accumulate; the board + ledger are the memory.
+- **Each wake is small + stateless:** render the view → gate (`/review-all`) → merge → move card → spawn
+  next → append one ledger event (`fleet-log.sh`) → done. Don't accumulate; the board + ledger are the memory.
 - **Prompt hygiene when parking (2026-07-10):** never leave unsubmitted draft text on your prompt line when
   you yield/idle - supervisors and humans steer you through that line, and a watchdog that finds text there
   must defer its message (live lesson: a starvation steering was correctly deferred for a full cycle because
@@ -702,11 +760,12 @@ Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
   drive another server only as `ssh <host> 'herdr <subcommand> ...'`, with the host explicit at each call
   site. Never point a local client at a remote socket or write `herdr --remote <host> agent ...`;
   `--remote` only opens the interactive UI attach and is not composable with driving subcommands.
-- **Three-level placement: workspace=space · tab=fleet run · pane=chunk.** The workspace is the human's
-  project space — do NOT create one per chunk. Tab 1 of a workspace belongs to the human's interactive
-  sessions — NEVER spawn fleet panes there or into whatever tab has focus. Create ONE `fleet:<epic>` tab on
-  primary or `fleet:<epic>@<slug>` on each non-primary machine and spawn that server's bare-named chunk
-  panes into it (`agent start ... --tab <tab_id>`); close or rename the machine-local tab when the run ends.
+- **Four-level placement: session=fleet run · workspace=`<epic>` · tab=machine · pane=chunk.** Every
+  fleet resource lives in the run's own herdr session `fleet-<epic>` (Setup step 7), never in the human's
+  default session - so no fleet pane can land in an interactive tab, and one `session stop` ends the run.
+  Inside it: one `<epic>` workspace, one `fleet:<epic>` tab on primary / `fleet:<epic>@<slug>` per
+  non-primary machine, bare-named chunk panes in that tab. Prefix EVERY driving command with
+  `--session fleet-<epic>`; the orchestrator's own pane is the only bare `herdr` target.
   **Retrofit/moves (dogfooded on a LIVE working codex pane — survives untouched):** `herdr pane move <pane_id>
   --tab <tab_id>` (existing tab) / `--new-tab --workspace <ws> --label TEXT` / `--new-workspace --label TEXT
   --tab-label TEXT` (creates workspace+tab+moves in one command; use `--no-focus`). CRITICAL: the pane_id
@@ -748,7 +807,7 @@ Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
   own dispatch; (c) such chunks carry a real-seam acceptance assertion (mock only non-deterministic leaves).
   UAT/dogfood is the backstop, not the primary catch.
 - **Never close a pane before archiving its result.** `close` is where the transcript dies (no herdr export; session-attach not guaranteed post-close). Capture `agent read --source recent` → the git-tracked run archive (`docs/superpowers/fleet-runs/<epic>.md`) FIRST, then close. The archive — not the live pane — is the restorable record.
-- **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Same law for herdr panes/tabs — close from the ledger's RES lines (see Housekeeping: Resource ledger), never by label pattern. Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
+- **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Same law for herdr panes/tabs - close from the ledger's `fleet.resource.minted` events (see Housekeeping: Resource ledger), never by label pattern. Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
 - **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
 - **Never brief `git add -A` while worktree-root scratch exists (live lesson - BRIEF.md/REPORT.md shipped to main twice).** Pane briefs and reports live at the worktree root; `add -A` commits them, the squash-merge lands them on main, and every later worktree "inherits" a stale brief. Fix: gitignore the scratch names (`/BRIEF.md`, `/REPORT.md`) in the repo once, AND write briefs with explicit `git add <paths>` or `git add -A ':!BRIEF.md' ':!REPORT.md'`. Gate check: the review diff must not contain the brief/report files.
 - **Long briefs travel as files, not keystrokes (2026-07-10 API-drop lessons).** Spawning/briefing with a
