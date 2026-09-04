@@ -26,7 +26,9 @@ import { allowedTargets, EVIDENCE, isAllowed } from "./src/ledger/transitions.ts
 import { render } from "./src/render/state.ts";
 import { renderNext } from "./src/render/next.ts";
 import { renderStatus } from "./src/render/status.ts";
+import { renderStats } from "./src/render/stats.ts";
 import { joinRun } from "./src/run/Run.ts";
+import { computeStats } from "./src/run/stats.ts";
 import { teardown } from "./src/teardown.ts";
 import { DEFAULT_WORKFLOW, hasStep, parseWorkflow, stepsFor } from "./src/workflow/Workflow.ts";
 
@@ -205,6 +207,13 @@ const statusCommand = Command.make("status", { dir: Argument.string("epic-dir"),
   }),
 ).pipe(Command.withDescription("Print one chunk for the pane that owns it: stage, step, attempt, blockers, dependents, acceptance"));
 
+const statsCommand = Command.make("stats", { dir: Argument.string("epic-dir") }, ({ dir }) =>
+  Effect.gen(function* () {
+    const run = yield* loadRun(dir);
+    yield* stdout(renderStats(computeStats(run.graph, run.events)));
+  }),
+).pipe(Command.withDescription("Time in stage per lane, retries and their causes, slowest stages, evidence on merged"));
+
 // ---- state ------------------------------------------------------------------------------
 const stateCommand = Command.make(
   "state",
@@ -265,7 +274,7 @@ const teardownCommand = Command.make(
 // ---- root -------------------------------------------------------------------------------
 const root = Command.make("fleet").pipe(
   Command.withDescription("fleet-ship ledger tooling: JSONL CloudEvents ledger, state view, teardown"),
-  Command.withSubcommands([logCommand, stateCommand, teardownCommand, graphCommand, initCommand, nextCommand, statusCommand]),
+  Command.withSubcommands([logCommand, stateCommand, teardownCommand, graphCommand, initCommand, nextCommand, statusCommand, statsCommand]),
 );
 
 const isCliError = (error: unknown): boolean => CliError.isCliError(error);

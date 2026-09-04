@@ -202,3 +202,12 @@ describe("fleet state (epic mode)", () => {
     expect(r.out).toContain("not started");
   });
 });
+
+describe("fleet stats", () => {
+  test("prints the stats blocks from an epic dir", () => {
+    const r = fleet(["stats", writeEpicDir(tmpRoot(), { events: RETRY_EVENTS })], { FLEET_SLUG: "mbp" });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("time in stage");
+    expect(r.out).toContain("w1-ui: 2 attempts");
+  });
+});
