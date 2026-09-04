@@ -209,21 +209,22 @@ const statusCommand = Command.make("status", { dir: Argument.string("epic-dir"),
 const stateCommand = Command.make(
   "state",
   {
-    ledger: Argument.string("ledger"),
+    ledger: Argument.string("epic-dir-or-ledger"),
     live: Flag.boolean("live").pipe(Flag.withDefault(false), Flag.withDescription("merge herdr agent list from the fleet session")),
     session: Flag.optional(Flag.string("session")),
     tail: Flag.integer("tail").pipe(Flag.withDefault(20)),
   },
-  ({ ledger, live, session, tail }) =>
+  ({ ledger: target, live, session, tail }) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      if (!(yield* fs.exists(ledger))) return yield* new UsageError({ message: `ledger does not exist: ${ledger}` });
-      const { events, malformed } = yield* Effect.gen(function* () {
-        return yield* (yield* Ledger).readAll;
-      }).pipe(Effect.provide(ledgerLayer(ledger)));
-      for (const m of malformed) yield* stderr(`fleet-state: line ${m.line} malformed (${m.reason}): ${m.raw.slice(0, 80)}`);
+      if (!(yield* fs.exists(target))) return yield* new UsageError({ message: `ledger or epic dir does not exist: ${target}` });
+      const epicMode = !isLedgerFile(target);
+      const paths = epicMode ? epicPaths(target, slugOf()) : null;
+      const graph = paths ? yield* loadGraph(paths.graph) : null;
+      const { events, malformed } = yield* readLedger(target);
+      for (const item of malformed) yield* stderr(`fleet-state: ${item.file ? item.file + " " : ""}line ${item.line} malformed (${item.reason}): ${item.raw.slice(0, 80)}`);
       const state = fold(events);
-      if (!state.epic) state.epic = basename(ledger, extname(ledger));
+      if (!state.epic) state.epic = paths ? paths.epic : basename(target, extname(target));
       const sessionName = Option.getOrNull(session) ?? state.session;
       const agents = live
         ? yield* Effect.gen(function* () {
@@ -233,7 +234,8 @@ const stateCommand = Command.make(
             Effect.catchTag("HerdrCommandFailed", (e) => stderr(`fleet-state: herdr agent list failed: ${e.output}`).pipe(Effect.as([]))),
           )
         : undefined;
-      yield* stdout(render({ state, events, malformed: malformed.length, tail, now: new Date(), live: agents }));
+      const run = graph ? joinRun(graph, state) : undefined;
+      yield* stdout(render({ state, events, malformed: malformed.length, tail, now: new Date(), live: agents, run }));
     }),
 ).pipe(Command.withDescription("Render the orchestrator's view: header, chunks, checklist, open items, live, action log"));
 

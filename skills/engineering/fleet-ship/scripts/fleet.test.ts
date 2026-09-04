@@ -192,3 +192,13 @@ describe("fleet next / status", () => {
     expect(r.err).toContain("fleet init");
   });
 });
+
+describe("fleet state (epic mode)", () => {
+  test("renders depth groups and the frontier from an epic dir", () => {
+    const r = fleet(["state", writeEpicDir(tmpRoot()), "--tail", "3"], { FLEET_SLUG: "mbp" });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("depth 0");
+    expect(r.out).toContain("frontier: 2");
+    expect(r.out).toContain("not started");
+  });
+});
