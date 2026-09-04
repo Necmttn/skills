@@ -130,6 +130,16 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    id: "tooling",
+    title: "Tooling",
+    docs: [
+      { id: "iter-loop", title: "Mobile iteration loop (tests, caches, seeded launch, AXe, merges)", path: join(PLAYBOOKS, "mobile-iteration-loop.md") },
+      { id: "sim-test", title: "sim-test skill (simulator workflow, AXe via XcodeBuildMCP or CLI)", path: "/Users/necmttn/.claude/skills/sim-test/SKILL.md" },
+      { id: "axe-skill", title: "axe skill: CLI contract (third-party, installed by `axe init`)", path: "/Users/necmttn/.claude/skills/axe/SKILL.md" },
+      { id: "xcodebuildmcp-skill", title: "xcodebuildmcp skill: MCP session protocol (official, installed by `xcodebuildmcp init`)", path: "/Users/necmttn/.claude/skills/xcodebuildmcp/SKILL.md" },
+    ],
+  },
+  {
     id: "paid-ua",
     title: "Paid UA",
     docs: [
