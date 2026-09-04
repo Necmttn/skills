@@ -25,6 +25,8 @@ export interface MalformedLine {
   readonly line: number;
   readonly raw: string;
   readonly reason: string;
+  /** Set when the ledger is read from an epic directory: the file the line came from. */
+  readonly file?: string;
 }
 
 /** Parse one ledger line. Never throws: a bad line is a Failure with a human reason. */
