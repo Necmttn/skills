@@ -42,7 +42,7 @@ export const allowedTargets = (p: Position): ReadonlyArray<string> => {
   return TABLE[p.stage ?? ""] ?? [];
 };
 
-export const isAllowed = (p: Position, to: string): boolean => allowedTargets(p).includes(to);
+export const isAllowed = (p: Position, to: string): boolean => (p.stage !== null && to === p.stage) || allowedTargets(p).includes(to);
 
 export type Cause = "initial" | "gate_failed" | "sent_back" | "followup";
 const CAUSES: ReadonlySet<string> = new Set(["initial", "gate_failed", "sent_back", "followup"]);

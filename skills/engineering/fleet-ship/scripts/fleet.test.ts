@@ -131,6 +131,12 @@ describe("fleet log (epic mode guard)", () => {
     const ledger = join(tmpRoot(), "demo.jsonl");
     expect(fleet(["log", ledger, "fleet.chunk.merged", "mbp/anything"]).code).toBe(0);
   });
+  test("a step update inside the same stage is accepted", () => {
+    const dir = writeEpicDir(tmpRoot(), { events: RETRY_EVENTS.slice(0, 10) }); // w1-ui is in_review with step codex-review
+    const r = fleet(["log", dir, "fleet.chunk.in_review", "mbp/w1-ui", "step=adversarial-review"], { FLEET_SLUG: "mbp" });
+    expect(r.code).toBe(0);
+    expect(lastLine(dir).data).toMatchObject({ step: "adversarial-review" });
+  });
 });
 
 describe("fleet graph check", () => {
