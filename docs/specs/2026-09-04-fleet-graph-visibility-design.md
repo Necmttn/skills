@@ -1,6 +1,6 @@
 # Fleet graph visibility - design
 
-Date: 2026-09-04. Status: draft for owner review. Scope: the `fleet-ship` skill and its `scripts/fleet.ts` tooling.
+Date: 2026-09-04. Status: approved by the owner 2026-09-04; open questions resolved in section 17. Scope: the `fleet-ship` skill and its `scripts/fleet.ts` tooling.
 
 ## 1. Problem
 
@@ -405,7 +405,7 @@ The librarian's loop, in order:
 2. Dedup. Match new entries against `KNOWHOW.md` and each other. A repeated problem raises the existing entry's `seen` count instead of a new entry.
 3. Verify. A `tip` or `solution` that names a command is run once in a scratch worktree before promotion. A claim the librarian cannot verify is promoted with `evidence: reported`, and the entry says so.
 4. Promote. Write the verified entries into `KNOWHOW.md` under their areas. Move the inbox files to `archive/` with `status: promoted` and a pointer to the section.
-5. Escalate. When a promoted entry says a script, a playbook, `CLAUDE.md`, a brief template, or the workflow template should change, the librarian does one of two things. For a change inside the fleet home or the skills repo, it opens a PR itself. For a change in the code repo, it files an issue labeled `knowhow` with the entry as body and the proposed diff, because code-repo changes go through the fleet's own gate.
+5. Escalate. When a promoted entry says a script, a playbook, `CLAUDE.md`, a brief template, or the workflow template should change, the librarian files an issue labeled `knowhow`. It never implements the change itself, in any repo. The issue goes to the skills repo when the change is inside the fleet tooling or the skill, and to the code repo otherwise. Every `knowhow` issue uses one fixed template so a later executor needs no further context: **Change** (one sentence), **Why** (the observed cost, with the entry id and the `fleet stats` number when one exists), **Where** (file paths), **Proposed diff or exact steps**, **Acceptance** (how the executor proves it worked), **Source entries** (links). A separate loop executes these issues: the existing `improve-loop` skill picks up open `knowhow` issues as tickets, routes them by lane, and PRs them through the normal gate. The librarian stays on curation; the executor stays on implementation.
 6. Reject. An entry that is wrong, a duplicate, or the chunk's own bug in disguise moves to `archive/` with `status: rejected` and one line of reason.
 7. Report. One `fleet.note` event in the current epic's ledger with counts: read, promoted, rejected, escalated. One comment on the run-map issue with the same counts and links.
 
@@ -469,10 +469,12 @@ Four chunks, each its own PR on the skills repo.
 
 Related open issues on the skills repo: #67 (chunk-needs contract, closed by the graph file's `needs`), #84 (move claim and lifecycle mechanics into code, partly served by the transition guard), #83 (risk-tiered review gate, orthogonal, the `step` vocabulary leaves room for it).
 
-## 17. Open questions for the owner
+## 17. Owner answers (2026-09-04)
 
-1. `~/.fleet/<repo>` as the default home path, or `~/Projects/.fleet/<repo>`?
-2. Does the `Stage` field replace `Status` on new projects, or do both stay? The design keeps both.
-3. Main-sync cadence: every third merge is a guess. Confirm or change.
-4. Librarian trigger threshold: five new inbox entries is a guess. Confirm or change.
-5. Should the librarian be allowed to open PRs on the code repo for pure documentation changes, or always file an issue? The design says always an issue.
+The questions in the first draft are resolved. They stay here so the reasoning is not lost.
+
+1. Default home path is `~/.fleet/<repo>`.
+2. Both `Status` and `Stage` stay. `Status` keeps the three kanban columns the board renders by default. `Stage` carries the full vocabulary for grouping and filtering. One field cannot do both without a custom board layout on every project.
+3. Main-sync cadence is every third merge and before landing.
+4. Librarian trigger threshold is five new inbox entries, plus every run wrap-up.
+5. The librarian always files an issue and never implements. A separate loop, the `improve-loop` skill, executes `knowhow` issues. The librarian's output must be instructions clear enough that the executor needs no further context; section 13.5 step 5 fixes the issue template.
