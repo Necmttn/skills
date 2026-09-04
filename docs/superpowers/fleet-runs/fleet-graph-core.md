@@ -306,3 +306,111 @@ No adjacent improvement is necessary for Task 3.
 
   gpt-5.6-sol medium · Context 88% left · ~/Projects/necmttn-skills/.claude/worktrees/fgc-c3-…
 ```
+
+## mac/c4-epic-run
+
+- Issue: #89 · Pane: w1:p6 · Engine: codex (medium) · Gate: PASS (orchestrator adversarial review vs plan; gates re-run: verified, 76 tests)
+- Commits: e8c2043 1f979ac
+
+### REPORT.md
+
+# mac/c4-epic-run Report
+
+## Result
+
+Tasks 6 and 7 are complete.
+
+## Commits
+
+- `e8c2043` `feat(fleet-ship): epic directory paths and multi-machine ledger read`
+- `1f979ac` `feat(fleet-ship): join graph and ledger into readiness, frontier, depth, blockers`
+
+## Verification
+
+- Baseline: 67 tests pass across 12 files.
+- Task 6: 69 tests pass across 12 files.
+- Task 7 test group: 7 tests pass across one file.
+- Final gate: 76 tests pass across 13 files, with 0 failures and 223 checks.
+- `bun run typecheck` exits with code 0.
+- `git diff --check HEAD~2..HEAD` exits with code 0.
+
+## TDD Evidence
+
+- Task 6 first fails because `layerDir` is not exported.
+- Task 7 first fails because `Run.ts` does not exist.
+- Each implementation makes its acceptance tests pass.
+
+## Adaptations
+
+No Effect API adaptation is necessary.
+
+## Concerns
+
+None.
+
+Improvement note: No adjacent improvement is necessary.
+
+### Pane tail (last 60 lines)
+
+```
+     7 +## Commits
+     8 +
+     9 +- `e8c2043` `feat(fleet-ship): epic directory paths and multi-machine ledger read`
+    10 +- `1f979ac` `feat(fleet-ship): join graph and ledger into readiness, frontier, depth,
+        blockers`
+    11 +
+    12 +## Verification
+    13 +
+    14 +- Baseline: 67 tests pass across 12 files.
+    15 +- Task 6: 69 tests pass across 12 files.
+    16 +- Task 7 test group: 7 tests pass across one file.
+    17 +- Final gate: 76 tests pass across 13 files, with 0 failures and 223 checks.
+    18 +- `bun run typecheck` exits with code 0.
+    19 +- `git diff --check HEAD~2..HEAD` exits with code 0.
+    20 +
+    21 +## TDD Evidence
+    22 +
+    23 +- Task 6 first fails because `layerDir` is not exported.
+    24 +- Task 7 first fails because `Run.ts` does not exist.
+    25 +- Each implementation makes its acceptance tests pass.
+    26 +
+    27 +## Adaptations
+    28 +
+    29 +No Effect API adaptation is necessary.
+    30 +
+    31 +## Concerns
+    32 +
+    33 +None.
+    34 +
+    35 +Improvement note: No adjacent improvement is necessary.
+
+• Hook failed
+  └ hook exited with code 1
+
+• Ran printf '%s mac/c4-epic-run DONE Tasks 6 and 7 complete; 76 tests pass; typecheck
+  │ clean\n' "$(date -Iseconds)" >> /tmp/fleet-fleet-graph-core.signals
+  └ (no output)
+
+• Hook failed
+  └ hook exited with code 1
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+
+• Completed mac/c4-epic-run.
+
+  - Task 6 commit: e8c2043
+  - Task 7 commit: 1f979ac
+  - Tests: 76 pass and 0 fail.
+  - Type check: clean.
+  - Concerns: none.
+  - Final signal: recorded.
+
+  See REPORT.md.
+
+─ Worked for 5m 57s ──────────────────────────────────────────────────────────────────────────
+
+
+› Ask Codex to do anything
+
+  gpt-5.6-sol medium · Context 85% left · ~/Projects/necmttn-skills/.claude/worktrees/fgc-c4-…
+```
