@@ -1,6 +1,6 @@
 # App playbook: golden track + `/app-idea` skill
 
-Date: 2026-09-04. Status: approved in chat (3 sections), pending written review.
+Date: 2026-09-04. Status: approved; implemented 2026-09-04 (plan docs/superpowers/plans/2026-09-04-app-playbook.md).
 
 ## Problem
 
