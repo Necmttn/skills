@@ -32,6 +32,23 @@ export const FIXTURE_EVENTS: ReadonlyArray<FleetEvent> = [
   event("fleet.resource.closed", "pane:w1:p6", {}, "2026-09-03T09:46:00Z"),
 ];
 
+/** A chunk that fails its gate, is sent back, is retried, blocks once, then merges. */
+export const RETRY_EVENTS: ReadonlyArray<FleetEvent> = [
+  event("fleet.run.started", "demo", { session: "fleet-demo" }, "2026-09-03T09:00:00Z"),
+  event("fleet.chunk.spawned", "mbp/w1-ui", { pane: "w1:p8", engine: "codex" }, "2026-09-03T09:01:00Z"),
+  event("fleet.chunk.building", "mbp/w1-ui", { step: "tdd-red" }, "2026-09-03T09:02:00Z"),
+  event("fleet.chunk.built", "mbp/w1-ui", { commit: "aaa111", evidence: "reported" }, "2026-09-03T09:20:00Z"),
+  event("fleet.chunk.gated", "mbp/w1-ui", { verdict: "FAIL", gist: "missing tests" }, "2026-09-03T09:30:00Z"),
+  event("fleet.chunk.building", "mbp/w1-ui", {}, "2026-09-03T09:31:00Z"),
+  event("fleet.chunk.blocked", "mbp/w1-ui", { gist: "needs token" }, "2026-09-03T09:40:00Z"),
+  event("fleet.chunk.building", "mbp/w1-ui", { step: "tdd-green" }, "2026-09-03T09:45:00Z"),
+  event("fleet.chunk.built", "mbp/w1-ui", { commit: "bbb222" }, "2026-09-03T10:00:00Z"),
+  event("fleet.chunk.in_review", "mbp/w1-ui", { step: "codex-review" }, "2026-09-03T10:05:00Z"),
+  event("fleet.chunk.gated", "mbp/w1-ui", { verdict: "PASS", evidence: "reported" }, "2026-09-03T10:20:00Z"),
+  event("fleet.chunk.merged", "mbp/w1-ui", { pr: "Necmttn/ax#800", evidence: "verified" }, "2026-09-03T10:30:00Z"),
+  event("fleet.run.landed", "demo", { pr: "Necmttn/ax#801", commit: "ccc333" }, "2026-09-03T11:00:00Z"),
+];
+
 /** The fixture as a ledger file body, with one malformed line at the end. */
 export const FIXTURE_TEXT = FIXTURE_EVENTS.map((e) => JSON.stringify(e)).join("\n") + "\nthis line is not json\n";
 
