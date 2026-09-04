@@ -20,6 +20,14 @@ export const FIXTURE_GRAPH: Graph = {
   ],
 };
 
+export const FIXTURE_GRAPH_CYCLE: Graph = {
+  ...FIXTURE_GRAPH,
+  chunks: [
+    { id: "a", title: "a", kind: "impl", lane: "mechanical", deps: ["b"], acceptance: "x" },
+    { id: "b", title: "b", kind: "impl", lane: "mechanical", deps: ["a"], acceptance: "x" },
+  ],
+};
+
 /** Write `<root>/demo/graph.json` + `ledger.mbp.jsonl`; returns the epic dir. */
 export const writeEpicDir = (root: string, opts: { events?: ReadonlyArray<FleetEvent>; graph?: Graph | null; slug?: string } = {}): string => {
   const dir = join(root, "demo");
