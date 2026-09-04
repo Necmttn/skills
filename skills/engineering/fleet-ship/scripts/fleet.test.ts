@@ -170,3 +170,25 @@ describe("fleet init", () => {
     expect(readFileSync(join(home, "demo", "graph.json"), "utf8")).toBe("{\"edited\":true}");
   });
 });
+
+describe("fleet next / status", () => {
+  test("next prints the frontier from an epic dir", () => {
+    const r = fleet(["next", writeEpicDir(tmpRoot())], { FLEET_SLUG: "mbp" });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("frontier (2)");
+    expect(r.out).toContain("w1-docs");
+  });
+  test("status prints one chunk and exit 2 for an unknown one", () => {
+    const dir = writeEpicDir(tmpRoot());
+    const ok = fleet(["status", dir, "mbp/w0-prunes"], { FLEET_SLUG: "mbp" });
+    expect(ok.code).toBe(0);
+    expect(ok.out).toContain("stage: merged");
+    expect(fleet(["status", dir, "nope"], { FLEET_SLUG: "mbp" }).code).toBe(2);
+  });
+  test("next without a graph.json is exit 2 with a hint", () => {
+    const dir = writeEpicDir(tmpRoot(), { graph: null });
+    const r = fleet(["next", dir], { FLEET_SLUG: "mbp" });
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("fleet init");
+  });
+});

@@ -24,6 +24,9 @@ import { bareId, fold } from "./src/ledger/fold.ts";
 import { Ledger, layer as ledgerLayer, layerDir } from "./src/ledger/Ledger.ts";
 import { allowedTargets, EVIDENCE, isAllowed } from "./src/ledger/transitions.ts";
 import { render } from "./src/render/state.ts";
+import { renderNext } from "./src/render/next.ts";
+import { renderStatus } from "./src/render/status.ts";
+import { joinRun } from "./src/run/Run.ts";
 import { teardown } from "./src/teardown.ts";
 import { DEFAULT_WORKFLOW, hasStep, parseWorkflow, stepsFor } from "./src/workflow/Workflow.ts";
 
@@ -60,6 +63,19 @@ const readLedger = (target: string) =>
   Effect.gen(function* () {
     return yield* (yield* Ledger).readAll;
   }).pipe(Effect.provide(ledgerLayerFor(target)));
+
+/** graph + folded ledger of an epic dir; UsageError when graph.json is missing. */
+const loadRun = (dir: string) =>
+  Effect.gen(function* () {
+    const paths = epicPaths(dir, slugOf());
+    const graph = yield* loadGraph(paths.graph);
+    if (!graph) return yield* new UsageError({ message: `no graph.json in ${paths.dir} - run fleet init, then write the graph` });
+    const { events, malformed } = yield* readLedger(dir);
+    for (const item of malformed) yield* stderr(`fleet: ${item.file ?? paths.ledger} line ${item.line} malformed (${item.reason})`);
+    const state = fold(events);
+    if (!state.epic) state.epic = paths.epic;
+    return { paths, graph, events, malformed, state, view: joinRun(graph, state) };
+  });
 
 // ---- log --------------------------------------------------------------------------------
 const logCommand = Command.make(
@@ -172,6 +188,23 @@ const initCommand = Command.make(
     }),
 ).pipe(Command.withDescription("Create the fleet home layout for an epic: graph.json, DECISIONS.md, knowhow/"));
 
+const nextCommand = Command.make("next", { dir: Argument.string("epic-dir") }, ({ dir }) =>
+  Effect.gen(function* () {
+    const run = yield* loadRun(dir);
+    yield* stdout(renderNext(run.view, new Date()));
+  }),
+).pipe(Command.withDescription("Print the frontier: chunks the orchestrator may spawn now, and why the rest wait"));
+
+const statusCommand = Command.make("status", { dir: Argument.string("epic-dir"), chunk: Argument.string("chunk") }, ({ dir, chunk }) =>
+  Effect.gen(function* () {
+    const run = yield* loadRun(dir);
+    const workflow = yield* loadWorkflow;
+    const result = renderStatus(run.view, chunk, new Date(), workflow);
+    if (!result) return yield* new UsageError({ message: `chunk ${chunk} is not in ${run.paths.graph}` });
+    yield* stdout(result);
+  }),
+).pipe(Command.withDescription("Print one chunk for the pane that owns it: stage, step, attempt, blockers, dependents, acceptance"));
+
 // ---- state ------------------------------------------------------------------------------
 const stateCommand = Command.make(
   "state",
@@ -230,7 +263,7 @@ const teardownCommand = Command.make(
 // ---- root -------------------------------------------------------------------------------
 const root = Command.make("fleet").pipe(
   Command.withDescription("fleet-ship ledger tooling: JSONL CloudEvents ledger, state view, teardown"),
-  Command.withSubcommands([logCommand, stateCommand, teardownCommand, graphCommand, initCommand]),
+  Command.withSubcommands([logCommand, stateCommand, teardownCommand, graphCommand, initCommand, nextCommand, statusCommand]),
 );
 
 const isCliError = (error: unknown): boolean => CliError.isCliError(error);
