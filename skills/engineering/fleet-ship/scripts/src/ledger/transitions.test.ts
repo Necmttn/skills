@@ -37,6 +37,10 @@ describe("allowedTargets", () => {
     expect(ACTIVE.has("assigned")).toBe(false);
     expect(ACTIVE.has("merged")).toBe(false);
   });
+  test("a stage may repeat itself so a step update inside the stage is legal", () => {
+    for (const s of ["spawned", "planned", "building", "built", "in_review", "gated", "merged", "dogfooded", "blocked", "error"]) expect(isAllowed(at(s), s)).toBe(true);
+    expect(isAllowed(at(null), "building")).toBe(false);
+  });
 });
 
 describe("causeFor", () => {

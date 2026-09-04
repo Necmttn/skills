@@ -628,6 +628,19 @@ its `Herdr` service (`scripts/src/herdr/Herdr.ts`) is the seam: `HerdrCli` shell
 today, a `HerdrSdk` layer over `@herdr/sdk` replaces it when the SDK ships, nothing above changes. Never hand-write a line; `fleet log <ledger> <type>
 <subject|-> [key=value …]` mints id + time (ints and true/false are coerced, everything else is a string).
 `source` defaults to `fleet/<epic>/<host>`; set `FLEET_SOURCE=fleet/<epic>/<slug>` once per machine.
+
+**Epic mode (2026-09-04, spec `docs/specs/2026-09-04-fleet-graph-visibility-design.md`):** every `fleet` command also accepts an
+**epic directory** `<FLEET_HOME>/<epic>` (default home `~/.fleet/<repo>`, an orphan-branch worktree created with
+`fleet init <home> <epic> --repo <owner/name> --plan <path>`). The directory holds `graph.json` (chunks + deps +
+conflicts + lane + hold, plan-only; validate with `fleet graph check <dir>`), one `ledger.<slug>.jsonl` per machine, and
+`DECISIONS.md`. In epic mode `fleet log` REFUSES an illegal stage transition (exit 2, prints the allowed targets; `--force`
+with `reason=` overrides and records `forced=true`), an unknown chunk id (`--adhoc` overrides), an unknown `step=` for
+the stage (steps come from `scripts/workflow.json`), a bad `evidence=` (`verified|reported|asserted`), and `merged` on a
+held chunk without `hold=approved`. New views: `fleet next <dir>` (the frontier - the ONLY chunks a wave may spawn),
+`fleet status <dir> <chunk>` (put this line in every brief so the pane sees its stage, blockers, dependents, acceptance),
+`fleet stats <dir>` (dwell per lane/stage, retries, causes). `fleet state <dir>` groups chunks by depth and adds `step` and
+`blocked-by` columns. The single-file form `fleet <cmd> <ledger>.jsonl` still works unchanged for runs already in flight.
+
 Type vocabulary (all `fleet.*`, the writer rejects anything else):
 | type | subject | data |
 |---|---|---|

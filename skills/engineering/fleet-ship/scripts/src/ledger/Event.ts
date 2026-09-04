@@ -44,7 +44,7 @@ export const parseLine = (raw: string, line = 0): Result.Result<FleetEvent, Malf
   return Result.succeed(decoded.success);
 };
 
-export const isFleetType = (type: string): type is FleetEvent["type"] => /^fleet\.[a-z][a-z0-9.-]*$/.test(type);
+export const isFleetType = (type: string): type is FleetEvent["type"] => /^fleet\.[a-z][a-z0-9._-]*$/.test(type);
 
 const isoSeconds = (date: Date) => date.toISOString().replace(/\.\d{3}Z$/, "Z");
 

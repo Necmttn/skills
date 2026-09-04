@@ -160,7 +160,7 @@ Transition table, enforced by `fleet log`:
 
 | From | Allowed to |
 |---|---|
-| (none) | assigned |
+| (none) | assigned, spawned |
 | assigned | spawned, blocked, error, closed |
 | spawned | planned, building, blocked, error |
 | planned | building, blocked, error |
@@ -173,6 +173,8 @@ Transition table, enforced by `fleet log`:
 | archived | closed |
 | blocked | the stage it left, building |
 | error | the stage it left, building, closed |
+
+> Retracted 2026-09-04 during chunk 1: the first draft allowed only `(none) -> assigned`. Every existing ledger starts at `spawned` or `building`, and a spawn implies assignment, so `spawned` is also a legal first stage. The inference that every chunk gets an explicit assign event before a pane exists was wrong; the orchestrator assigns and spawns in one wake.
 
 - `blocked` and `error` remember the stage they interrupted. Leaving them returns to that stage or to `building`.
 - An illegal transition fails with exit 2 and prints the current stage and the allowed targets. `--force reason="..."` records the transition with `forced=true` and the reason in data.
@@ -206,7 +208,11 @@ The `step` key on an event must name a step under its stage. The fold records th
 
 The fold joins `graph.json` and every ledger file into one run state. Pure, tested with fixtures. Per chunk it holds: stage, step, attempt list, blocked-by (deps not yet `merged` or later), dependents, conflict holds (conflicting chunks that are active), readiness, hold state, pane, engine, PR, evidence.
 
-Readiness: a chunk is **ready** when every dep is `merged` or later, it has no stage yet or is `assigned`, no conflicting chunk is between `spawned` and `gated`, and either `hold` is null or the hold was approved. The **frontier** is the set of ready chunks. A `question` chunk is ready but renders as `needs answer` and is never spawned as a build pane.
+Readiness: a chunk is **ready** when every dep is `merged` or later, it has no stage yet or is `assigned`, and no conflicting chunk is active (`spawned` through `gated`, including `blocked` and `error`). `hold` does not affect readiness: a held chunk is spawned and built like any other and stops at `gated`. The guard enforces the hold on the `gated -> merged` transition, which needs `hold=approved` on that event or on the chunk's folded data.
+
+> Retracted 2026-09-04 during chunk 1: the first draft made readiness depend on "the hold was approved". That conflated spawn readiness with merge permission. A hold gates the merge, not the start; the Held-chunks rule in SKILL.md already says "runs the full loop, stops at GATED".
+
+The **frontier** is the set of ready chunks. A `question` chunk is ready but renders as `needs answer` and is never spawned as a build pane.
 
 ### 7.5 Commands
 

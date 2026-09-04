@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { fold } from "./fold.ts";
-import { FIXTURE_EVENTS, RETRY_EVENTS } from "../testing/fixture.ts";
+import { event, FIXTURE_EVENTS, RETRY_EVENTS } from "../testing/fixture.ts";
 
 describe("fold - attempts, step, interrupted, evidence, landed", () => {
   const chunk = fold(RETRY_EVENTS).chunks.get("mbp/w1-ui")!;
@@ -37,5 +37,11 @@ describe("fold - attempts, step, interrupted, evidence, landed", () => {
     const s = fold(FIXTURE_EVENTS);
     expect(s.chunks.get("mbp/w0-prunes")?.stage).toBe("merged");
     expect(s.chunks.get("mbp/w0-ffi")?.attempts).toEqual([]);
+  });
+  test("a repeated building event while an attempt is open does not push a new attempt", () => {
+    const s = fold([...RETRY_EVENTS.slice(0, 3), event("fleet.chunk.building", "mbp/w1-ui", { step: "tdd-green" }, "2026-09-03T09:10:00Z")]);
+    const repeated = s.chunks.get("mbp/w1-ui")!;
+    expect(repeated.attempts.length).toBe(1);
+    expect(repeated.step).toBe("tdd-green");
   });
 });
