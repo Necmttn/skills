@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Result } from "effect";
-import { makeEvent, parseLine } from "./Event.ts";
+import { isFleetType, makeEvent, parseLine } from "./Event.ts";
 
 describe("FleetEvent", () => {
   test("makeEvent mints a CloudEvents 1.0 record with a unique id and a Z time", () => {
@@ -31,5 +31,12 @@ describe("FleetEvent", () => {
     expect(Result.isFailure(bad)).toBe(true);
     if (Result.isFailure(bad)) expect(bad.failure.reason).toContain("JSON");
     expect(Result.isFailure(parseLine("42"))).toBe(true);
+  });
+});
+
+describe("isFleetType", () => {
+  test("accepts underscore stages in the fleet namespace only", () => {
+    expect(isFleetType("fleet.chunk.in_review")).toBe(true);
+    expect(isFleetType("chunk.merged")).toBe(false);
   });
 });

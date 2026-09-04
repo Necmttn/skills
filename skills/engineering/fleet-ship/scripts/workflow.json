@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "steps": {
+    "planned": ["plan-drafted", "plan-approved"],
+    "building": ["tdd-red", "tdd-green", "self-review", "report", "survey"],
+    "in_review": ["review-all", "codex-review", "adversarial-review"],
+    "gated": ["consensus", "hold-approved"],
+    "merged": ["main-synced", "archived-report"],
+    "dogfooded": ["tracer-run", "findings-filed"]
+  }
+}

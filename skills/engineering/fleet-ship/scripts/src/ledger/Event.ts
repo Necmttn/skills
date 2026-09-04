@@ -25,6 +25,8 @@ export interface MalformedLine {
   readonly line: number;
   readonly raw: string;
   readonly reason: string;
+  /** Set when the ledger is read from an epic directory: the file the line came from. */
+  readonly file?: string;
 }
 
 /** Parse one ledger line. Never throws: a bad line is a Failure with a human reason. */
@@ -42,7 +44,7 @@ export const parseLine = (raw: string, line = 0): Result.Result<FleetEvent, Malf
   return Result.succeed(decoded.success);
 };
 
-export const isFleetType = (type: string): type is FleetEvent["type"] => /^fleet\.[a-z][a-z0-9.-]*$/.test(type);
+export const isFleetType = (type: string): type is FleetEvent["type"] => /^fleet\.[a-z][a-z0-9._-]*$/.test(type);
 
 const isoSeconds = (date: Date) => date.toISOString().replace(/\.\d{3}Z$/, "Z");
 

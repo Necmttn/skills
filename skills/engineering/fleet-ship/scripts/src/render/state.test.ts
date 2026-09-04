@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { fold } from "../ledger/fold.ts";
+import { joinRun } from "../run/Run.ts";
+import { FIXTURE_GRAPH } from "../testing/graphFixture.ts";
 import { render } from "./state.ts";
 import { FIXTURE_EVENTS, FIXTURE_LIVE } from "../testing/fixture.ts";
 
@@ -68,5 +70,25 @@ describe("render (live)", () => {
     const events = [...FIXTURE_EVENTS.filter((e) => e.type !== "fleet.chunk.merged")];
     const t = render({ state: fold(events), events, malformed: 0, tail: 5, now: NOW, live: FIXTURE_LIVE.agents });
     expect(t).toContain("gone mbp/w0-prunes pane w1:p6");
+  });
+});
+
+describe("render (epic mode)", () => {
+  const state = fold(FIXTURE_EVENTS);
+  const text = render({ state, events: FIXTURE_EVENTS, malformed: 0, tail: 5, now: NOW, run: joinRun(FIXTURE_GRAPH, state) });
+
+  test("chunks are grouped by depth and unstarted graph chunks appear", () => {
+    expect(text.indexOf("depth 0")).toBeLessThan(text.indexOf("depth 1"));
+    expect(row(text, "w1-ui")).toContain("not started");
+    expect(row(text, "w1-ui")).toContain("w0-ffi");
+  });
+  test("header row has step and blocked-by columns; checklist has the frontier", () => {
+    expect(text).toContain("chunk | stage | step | blocked-by | pane | live | engine | pr | age | gist");
+    expect(text).toContain("frontier: 2");
+  });
+  test("without run the legacy layout is unchanged", () => {
+    const legacy = render({ state, events: FIXTURE_EVENTS, malformed: 0, tail: 5, now: NOW });
+    expect(legacy).toContain("chunk | stage | pane | live | engine | pr | age | gist");
+    expect(legacy).not.toContain("depth 0");
   });
 });
