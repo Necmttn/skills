@@ -414,3 +414,119 @@ Improvement note: No adjacent improvement is necessary.
 
   gpt-5.6-sol medium · Context 85% left · ~/Projects/necmttn-skills/.claude/worktrees/fgc-c4-…
 ```
+
+## mac/c5-cli
+
+- Issue: #90 · Pane: w1:p7 · Engine: codex (medium) · Gate: PASS after one orchestrator fix (same-stage step repeat); orchestrator re-ran gates (108 tests at pane stop) and dogfooded every new command against this run's own ledger + a hand-written graph.json
+- Commits: bf8796a c0ea0f3 b9b2b2c 606da42 af80445 (+ fix commit, see below)
+
+### REPORT.md (at pane stop)
+
+# mac/c5-cli Report
+
+## Result
+
+All work in Tasks 8 through 12 is complete.
+
+## Commits
+
+- `bf8796a8d2dee90d76e640c4031fbb9cba696533` - Task 8 CLI guards, graph check, init, and event type fix.
+- `c0ea0f3a0bfaf61fe4abb54dd1ab692d915e662e` - Task 9 next and status views.
+- `b9b2b2ca6a019d0e1971854b3ad2ddf5875082dc` - Task 10 state epic mode.
+- `606da42bfcfcbfc35bd61bc8e116f89cddc4c962` - Task 11 statistics view.
+- `af8044524c3e0fc0615bf046e673596ff7a08fcb` - Task 12 specification changes and epic mode instructions.
+
+## Verification
+
+- `bun run test`: 108 tests pass across 16 files.
+- `bun run typecheck`: Exit code 0.
+- `git diff --check`: No error.
+
+## Adaptations
+
+The Task 8 allowed-transition tests add a `spawned` event for `w1-docs`.
+
+The shared fixture has no prior event for this chunk.
+
+The transition table does not permit a direct transition from no stage to `building`.
+
+No Effect API adaptation was necessary.
+
+## Concerns
+
+No known concern remains in this chunk.
+
+## Improvement note
+
+A future fixture builder can require an explicit starting stage for each transition test.
+
+### Pane tail (last 60 lines)
+
+```
+    25 +The shared fixture has no prior event for this chunk.
+    26 +
+    27 +The transition table does not permit a direct transition from no stage to `building`.
+    28 +
+    29 +No Effect API adaptation was necessary.
+    30 +
+    31 +## Concerns
+    32 +
+    33 +No known concern remains in this chunk.
+    34 +
+    35 +## Improvement note
+    36 +
+    37 +A future fixture builder can require an explicit starting stage for each transition te
+        st.
+
+• Hook failed
+  └ hook exited with code 1
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+
+• The report is ready. I will run the final gates once more, check the worktree, and send the
+  required signal.
+
+• Ran bun run test && bun run typecheck && git diff --check && git status --short
+  │ --untracked-files=all
+  └
+     108 pass
+    … +2 lines (ctrl + t to view transcript)
+    Ran 108 tests across 16 files. [8.60s]
+    $ tsc --noEmit
+
+• Hook failed
+  └ hook exited with code 1
+
+• Ran stamp=$(date -Iseconds); echo "$stamp mac/c5-cli DONE Tasks 8-12 complete; 108 tests
+  │ pass and typecheck passes" >> /tmp/fleet-fleet-graph-core.signals
+  └ (no output)
+
+• Hook failed
+  └ hook exited with code 1
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+
+• mac/c5-cli DONE.
+
+  Tasks 8 through 12 are complete.
+
+  - Tests: 108 pass.
+  - Type check: Pass.
+  - Commits: Five required commits.
+  - Concerns: None.
+
+  See REPORT.md.
+
+─ Worked for 13m 38s ─────────────────────────────────────────────────────────────────────────
+
+
+› Ask Codex to do anything
+
+  gpt-5.6-sol medium · Context 60% left · ~/Projects/necmttn-skills/.claude/worktrees/fgc-c5-…
+```
+
+### Dogfood findings
+
+- All new commands work on the real fleet-graph-core ledger: graph check ok (5 chunks), next/status/state/stats render, guard refuses building->merged with the allowed list.
+- GAP: a repeated same-stage event (step update inside a stage) was refused as illegal; fixed by the orchestrator via a sonnet fix subagent before merge.
+- `fleet stats` on this run: mechanical building mean 5.3m max 7m over 4 chunks; evidence on merged verified=4.
