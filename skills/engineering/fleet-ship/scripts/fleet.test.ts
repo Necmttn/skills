@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { event, FIXTURE_EVENTS, FIXTURE_TEXT, RETRY_EVENTS } from "./src/testing/fixture.ts";
-import { FIXTURE_GRAPH_CYCLE, writeEpicDir } from "./src/testing/graphFixture.ts";
+import { FIXTURE_GRAPH, FIXTURE_GRAPH_CYCLE, writeEpicDir } from "./src/testing/graphFixture.ts";
 
 const CLI = new URL("./fleet.ts", import.meta.url).pathname;
 
@@ -215,5 +215,68 @@ describe("fleet stats", () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain("time in stage");
     expect(r.out).toContain("w1-ui: 2 attempts");
+  });
+});
+
+describe("fleet safeguards through the real CLI", () => {
+  const env = { FLEET_SLUG: "mbp" };
+  const graph = { ...FIXTURE_GRAPH, safeguards: true, chunks: [{ ...FIXTURE_GRAPH.chunks[0]!, id: "demo", deps: [] }] };
+  test("fresh attempts require tokens; stale events and force cannot bypass receipts", () => {
+    const dir = writeEpicDir(tmpRoot(), { graph, events: [] });
+    const log = (stage: string, ...pairs: string[]) => fleet(["log", dir, `fleet.chunk.${stage}`, "mbp/demo", ...pairs], env);
+    expect(log("spawned").code).toBe(0);
+    expect(log("building").code).toBe(0);
+    const token = lastLine(dir).data.attempt_id;
+    expect(typeof token).toBe("string");
+    const sha = "a".repeat(40);
+    expect(log("built", `commit=${sha}`).code).toBe(2);
+    expect(log("built", `attempt_id=${token}`, `commit=${sha}`).code).toBe(0);
+    expect(log("in_review", `attempt_id=${token}`).code).toBe(0);
+    expect(log("gated", `attempt_id=${token}`, `commit=${sha}`).code).toBe(2);
+    expect(log("gated", `attempt_id=${token}`, `commit=${sha}`, "verdict=PASS", "evidence=verified", "checks=proof.md").code).toBe(0);
+    expect(fleet(["log", dir, "fleet.chunk.merged", "mbp/demo", "--force", "reason=skip", `attempt_id=${token}`], env).code).toBe(2);
+    expect(log("building").code).toBe(0);
+    const next = lastLine(dir).data.attempt_id;
+    expect(next).not.toBe(token);
+    expect(log("built", `attempt_id=${token}`, `commit=${sha}`).code).toBe(2);
+    expect(log("built", `attempt_id=${next}`, `commit=${sha}`).code).toBe(0);
+  });
+
+  test("check-gate checks real git HEAD and refuses a changed or dirty tree", () => {
+    const wt = tmpRoot();
+    const git = (...args: string[]) => {
+      const p = Bun.spawnSync(["git", "-C", wt, ...args], { stdout: "pipe", stderr: "pipe" });
+      expect(p.exitCode).toBe(0);
+      return p.stdout.toString().trim();
+    };
+    git("init");
+    git("-c", "user.name=Fleet Test", "-c", "user.email=fleet@example.invalid", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "initial");
+    const sha = git("rev-parse", "HEAD");
+    const dir = writeEpicDir(tmpRoot(), { graph, events: [
+      event("fleet.chunk.building", "mbp/demo", { attempt_id: "one" }, "2026-09-05T00:00:01Z"),
+      event("fleet.chunk.built", "mbp/demo", { attempt_id: "one", commit: sha }, "2026-09-05T00:00:02Z"),
+      event("fleet.chunk.in_review", "mbp/demo", { attempt_id: "one" }, "2026-09-05T00:00:03Z"),
+      event("fleet.chunk.gated", "mbp/demo", { attempt_id: "one", commit: sha, verdict: "PASS", evidence: "verified", checks: "proof.md" }, "2026-09-05T00:00:04Z"),
+    ] });
+    const check = () => fleet(["check-gate", dir, "mbp/demo", "--worktree", wt], env);
+    expect(check().code).toBe(0);
+    writeFileSync(join(wt, "unexpected.txt"), "dirty");
+    expect(check().err).toContain("dirty");
+    git("add", "unexpected.txt");
+    git("-c", "user.name=Fleet Test", "-c", "user.email=fleet@example.invalid", "-c", "commit.gpgsign=false", "commit", "-m", "changed");
+    expect(check().err).toContain("commit");
+  });
+
+  test("pause, capacity, and invalid graph block assignment through log", () => {
+    const limited = { ...graph, scheduling: { max_in_flight: 1, max_gate_queue: 1 }, chunks: [graph.chunks[0]!, { ...graph.chunks[0]!, id: "other" }] };
+    const dir = writeEpicDir(tmpRoot(), { graph: limited, events: [] });
+    expect(fleet(["log", dir, "fleet.policy.set", "spawn-paused", "text=broken verifier"], env).code).toBe(0);
+    expect(fleet(["log", dir, "fleet.chunk.spawned", "mbp/demo"], env).err).toContain("paused");
+    expect(fleet(["log", dir, "fleet.policy.set", "spawn-paused", "text=off"], env).code).toBe(0);
+    expect(fleet(["log", dir, "fleet.chunk.assigned", "mbp/demo"], env).code).toBe(0);
+    expect(fleet(["log", dir, "fleet.chunk.spawned", "mbp/demo"], env).code).toBe(0);
+    expect(fleet(["log", dir, "fleet.chunk.assigned", "mbp/other"], env).err).toContain("capacity");
+    writeFileSync(join(dir, "graph.json"), JSON.stringify({ ...limited, scheduling: { max_in_flight: -1, max_gate_queue: 1 } }));
+    expect(fleet(["next", dir], env).code).toBe(2);
   });
 });

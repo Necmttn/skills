@@ -44,6 +44,7 @@ export const render = ({ state, events, malformed, tail, now, live, run }: Rende
   const out: Array<string> = [];
   out.push(`epic: ${state.epic ?? "?"}   session: ${state.session ?? "-"}   last action: ${state.last ?? "-"} (${age(state.last, now)} ago)`);
   out.push(`events: ${events.length}   malformed: ${malformed}   runmap: ${state.runmap ?? "-"}   kanban: ${state.kanban ?? "-"}`);
+  for (const item of state.rejected) out.push(`REJECTED ${item.subject} event ${item.id}: ${item.reason}`);
   if (state.cursor) out.push("cursor: " + Object.entries(state.cursor).map(([k, v]) => `${k}=${text(v)}`).join(" "));
   for (const [name, policy] of state.policies) out.push(`policy ${name}: ${policy}`);
   if (state.teardown) out.push(`TEARDOWN DONE at ${state.teardown}`);

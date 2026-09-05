@@ -1,8 +1,10 @@
 /** Fold a ledger's events into the run's current state. Pure. */
 import type { FleetData, FleetEvent } from "./Event.ts";
 import { causeFor, EVIDENCE_STAGES, RETURNS_TO_BUILDING, type Cause } from "./transitions.ts";
+import { eventError, type GateReceipt } from "./safety.ts";
 
 export interface Attempt {
+  id: string | null;
   n: number;
   cause: Cause;
   pane: string | null;
@@ -15,6 +17,9 @@ export interface Attempt {
 }
 
 export interface ChunkState {
+  gate: GateReceipt | null;
+  merged: boolean;
+  dogfooded: boolean;
   stage: string;
   time: string | null;
   data: Record<string, unknown>;
@@ -25,6 +30,7 @@ export interface ChunkState {
 }
 
 export interface RunState {
+  rejected: Array<{ id: string; subject: string; reason: string }>;
   epic: string | null;
   session: string | null;
   runmap: string | null;
@@ -42,7 +48,7 @@ export interface RunState {
 const str = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
 const SIDE = new Set(["blocked", "error"]);
 
-const newChunk = (): ChunkState => ({ stage: "?", time: null, data: {}, step: null, interrupted: null, attempts: [], evidence: null });
+const newChunk = (): ChunkState => ({ stage: "?", time: null, data: {}, step: null, interrupted: null, attempts: [], evidence: null, gate: null, merged: false, dogfooded: false });
 
 const applyChunkEvent = (chunk: ChunkState, stage: string, data: FleetData, when: string | null): void => {
   const prev = chunk.stage === "?" ? null : chunk.stage;
@@ -61,7 +67,13 @@ const applyChunkEvent = (chunk: ChunkState, stage: string, data: FleetData, when
   const isOpen = open !== undefined && open.ended === null;
   if (stage === "building" && !isOpen) {
     const cause: Cause = effectiveFrom && RETURNS_TO_BUILDING.has(effectiveFrom) ? causeFor(effectiveFrom, prevData, data) : causeFor(null, prevData, data);
+    chunk.gate = null;
+    chunk.merged = false;
+    chunk.dogfooded = false;
+    chunk.evidence = null;
+    for (const key of ["hold", "commit", "checks", "verdict", "evidence", "input_commit"]) delete chunk.data[key];
     chunk.attempts.push({
+      id: str(data.attempt_id),
       n: chunk.attempts.length + 1,
       cause,
       pane: str(data.pane) ?? str(chunk.data.pane),
@@ -77,6 +89,16 @@ const applyChunkEvent = (chunk: ChunkState, stage: string, data: FleetData, when
     open.evidence = stage === "built" ? (str(data.evidence) ?? "asserted") : null;
     if (!open.pane) open.pane = str(chunk.data.pane);
     if (!open.engine) open.engine = str(chunk.data.engine);
+  }
+
+  if (stage === "gated" && str(data.attempt_id)) {
+    chunk.gate = { attempt: String(data.attempt_id), commit: String(data.commit), checks: String(data.checks) };
+  }
+  if (stage === "merged" || stage === "dogfooded") chunk.merged = true;
+  if (stage === "dogfooded") chunk.dogfooded = true;
+  if (str(data.commit) && chunk.gate && data.commit !== chunk.gate.commit && stage !== "merged") {
+    chunk.gate = null;
+    delete chunk.data.hold;
   }
 
   // evidence
@@ -99,9 +121,12 @@ export const fold = (events: ReadonlyArray<FleetEvent>): RunState => {
   const state: RunState = {
     epic: null, session: null, runmap: null, kanban: null,
     policies: new Map(), cursor: null, chunks: new Map(), attn: new Map(), resources: new Map(),
-    last: null, teardown: null, landed: null,
+    last: null, teardown: null, landed: null, rejected: [],
   };
+  const seen = new Set<string>();
   for (const event of events) {
+    if (seen.has(event.id)) continue;
+    seen.add(event.id);
     const { type, subject, data } = event;
     const when = event.time || null;
     state.last = when ?? state.last;
@@ -129,6 +154,11 @@ export const fold = (events: ReadonlyArray<FleetEvent>): RunState => {
       state.attn.delete(subject);
     } else if (type.startsWith("fleet.chunk.")) {
       const chunk = state.chunks.get(subject) ?? newChunk();
+      const reason = eventError(chunk, type.slice("fleet.chunk.".length), data);
+      if (reason) {
+        state.rejected.push({ id: event.id, subject, reason });
+        continue;
+      }
       applyChunkEvent(chunk, type.slice("fleet.chunk.".length), data, when);
       state.chunks.set(subject, chunk);
     }
