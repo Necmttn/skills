@@ -51,6 +51,9 @@ const parseCodex = (lines: ReadonlyArray<string>, path: string): Transcript => {
     } else if (p.type === "function_call" || p.type === "custom_tool_call") {
       const raw = p.arguments ?? p.input ?? ""
       let detail = typeof raw === "string" ? raw : JSON.stringify(raw)
+      // codex edits hide inside exec/apply_patch payloads: surface each touched path as its own edit turn
+      for (const m of detail.matchAll(/\*\*\* (?:Update|Add|Delete) File: ([^\\"\n]+)/g)) turns.push({ kind: "tool", name: "apply_patch", detail: m[1]!.trim(), at })
+      for (const m of detail.matchAll(/(?:writeFile|write_file|Bun\.write)\(\s*["'`]([^"'`]+)["'`]/g)) turns.push({ kind: "tool", name: "write_file", detail: m[1]!.trim(), at })
       const cmd = /cmd:\s*"((?:[^"\\]|\\.)*)"/.exec(detail) ?? /"command":\s*"((?:[^"\\]|\\.)*)"/.exec(detail)
       if (cmd) detail = cmd[1]!.replace(/\\"/g, '"').replace(/\\n/g, "\n")
       turns.push({ kind: "tool", name: p.name ?? "tool", detail, at })
