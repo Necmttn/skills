@@ -291,7 +291,7 @@ pane (via `fleetctl attn` + PushNotification); it never auto-kills - the orchest
 recovers (close dead pane → re-spawn grok→codex→fable/opus in the same installed worktree).
 
 Error signatures (grep the tail case-insensitively - extend per engine):
-`out of credits|rate.?limit|429|403|5[0-9][0-9] (Bad Gateway|Internal|Service)|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found|No such file`
+`out of credits|usage limit|hit your (usage|rate) limit|try again at|rate.?limit|429|403|5[0-9][0-9] (Bad Gateway|Internal|Service)|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found|No such file`
 
 Use the tracked `scripts/monitor-tail.py` helper rather than copying terminal-UI regexes into monitor loops.
 It normalizes only known volatile Codex chrome: startup spinner elapsed time, `esc to interrupt`, and
@@ -305,7 +305,7 @@ MACHINE_SLUG="${MACHINE_SLUG:?export the fleetctl join machine slug}"
 NORMALIZER="${FLEET_SHIP_DIR:-}/scripts/monitor-tail.py"
 [ -f "$NORMALIZER" ] || { echo "ERRORED:monitor missing monitor-tail helper; set FLEET_SHIP_DIR as above"; exit 2; }
 # export NAMES="chunk-a chunk-b …" (your fleet's chunk ids) OR export FLEET_TAB=<fleet tab id> (filtered client-side; herdr agent list takes no flags) before running - scoping is mandatory
-SIG='out of credits|rate.?limit|429| 403 | 5[0-9][0-9] |ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found'
+SIG='out of credits|usage limit|hit your (usage|rate) limit|try again at|rate.?limit|429| 403 | 5[0-9][0-9] |ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network error|connection (refused|reset|closed)|socket hang up|fetch failed|panic|Traceback|FATAL|command not found'
 touch "$STATE"
 for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestrator on exit
   # Scope to THIS fleet's chunk names ONLY - never ring on the orchestrator or a sibling fleet's panes.
@@ -316,6 +316,15 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
     WT=".claude/worktrees/$N"
     g=$(herdr agent get "$N" 2>/dev/null); [ -z "$g" ] && { echo "DEAD:$REPORT_NAME gone from agent list"; continue; }   # vanished → ring+respawn
     st=$(printf '%s' "$g" | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null)
+    # QUOTA_LOW - read the rate-limit window from telemetry (never scrape footers). "5h 100%" / "7d 0%" = percent LEFT.
+    # Below QUOTA_MIN (default 10) the pane can still write: emit once and send ROTATE NOW so a handoff exists BEFORE the usage-limit error kills it.
+    lim=$(printf '%s' "$g" | python3 -c 'import sys,json,re;t=json.load(sys.stdin)["result"]["agent"].get("tokens") or {};m=re.findall(r"(\d+)%",t.get("limit",""));print(min(map(int,m)) if m else "")' 2>/dev/null)
+    if [ -n "$lim" ] && [ "$lim" -le "${QUOTA_MIN:-10}" ] && ! grep -q "^quota	$N$" "$STATE"; then
+      printf 'quota\t%s\n' "$N" >> "$STATE"
+      echo "QUOTA_LOW:$REPORT_NAME limit=${lim}% left"
+      case "$st" in working) : ;; *) herdr agent prompt "$N" "ROTATE NOW: write the rotation handoff per REFERENCE schema (branch, checkpoint commit, remaining work), commit it, then park with an empty prompt. Your provider quota is almost dry." >/dev/null 2>&1 ;; esac
+      continue
+    fi
     tail=$(herdr agent read "$N" --source recent --lines 40 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["read"]["text"])' 2>/dev/null)
     # ERRORED - ring NOW, don't wait out the stall window
     if printf '%s' "$tail" | grep -Eiq "$SIG"; then
@@ -336,7 +345,7 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
   sleep 120   # backpressure between sweeps (fine inside a background script - same as the waiter scripts above)
 done
 ```
-Any `ERRORED:` / `STUCK:` / `DEAD:` / `BOOT_HUNG:` line the orchestrator sees on the background task's output → read that
+Any `ERRORED:` / `STUCK:` / `DEAD:` / `BOOT_HUNG:` / `QUOTA_LOW:` line the orchestrator sees on the background task's output → read that
 pane's tail, classify (real long compile vs frozen), and recover per Hard rules. `STALL_SWEEPS` guards a legit long suite:
 a pane running tests has *meaningful changing* output (fingerprint moves → cnt resets); only an inert pane, including a
 timer-only boot spinner, accumulates cnt. Tune the threshold up for repos with multi-minute compiles. `BOOT_HUNG` is
@@ -495,6 +504,29 @@ Spawn dogfood panes on **sonnet** (`claude --model sonnet --dangerously-skip-per
 reactor-subtle merges; never fable (scoping/planning/review only).
 Run dogfood only when test/build panes are quiescent (shared ports/DB collide).
 > GATE dogfood panes on the REPORT FILE, not pane status: brief them to write findings to a known path (e.g. scratchpad/dogfood-output/report.md); the waiter polls for that file's existence. herdr status for app-driving panes flickers to `unknown` and breaks status-based waiters (a real 'stuck' — the loop went blind while the dogfood was actually done).
+
+## Dead-pane rescue - the pane died on a usage limit and no handoff exists
+Live case 2026-09-05: five codex panes stopped mid-task with `You've hit your usage limit ... try again at
+<date>`; Claude had quota. A dead pane cannot write its handoff, so the successor rebuilds state from the
+**transcript on disk** - it is the handoff carrier and it survives the pane.
+- Codex: `~/.codex/sessions/YYYY/MM/DD/rollout-*-<session-id>.jsonl`; session id = `agent_session.value`
+  from `herdr agent get <pane>`. Claude: `~/.claude/projects/<cwd-slug>/<session-id>.jsonl` (lanes need
+  `CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1`, or the child pane saves no transcript).
+- Also readable while the pane exists: `herdr agent read <pane> --source recent-unwrapped --lines 600`.
+  A secret the owner pasted into the dead pane lives there - the successor reads it, never echoes it.
+1. Classify from the tail: finished its turn (report lost only) vs died mid-task (rescue). `tokens.limit`
+   on the dead engine tells you which engines are dry; pick a successor engine that is not.
+2. Write a short brief (`~/.cache/herdr-rescue/<name>.md`): transcript path, worktree + branch,
+   `git status` at cutoff, the last thing it was doing, remaining steps, hard rules from the original brief.
+3. Spawn the successor in the SAME workspace and SAME worktree: `herdr tab create --workspace <ws>
+   --cwd <wt> --label rescue:<name>-<engine>` -> `herdr agent start rescue-<name> --kind <engine>
+   --pane <root_pane> -- <bypass flag>` (names: lowercase, digits, `-`, `_` only - a `.` is rejected) ->
+   clear the trust prompt (`agent send-keys <n> Down Enter`) -> `agent prompt <n> "Read <brief> and
+   execute it. You replace a pane that ran out of usage; reconstruct state from the transcript first."`
+4. Rename the dead pane's tab `<label> MOVED -> rescue-<name> (<pane>)` so nobody prompts the corpse;
+   close it only after the successor has read everything it needs (archive rule applies).
+5. Re-arm the waiter and the monitor on the successor. Prevention is the `QUOTA_LOW` rung above: a pane
+   asked to ROTATE at 10% left writes its own handoff and this section is never needed.
 
 ## Rotation handoff schema (pointers + fresh queries — only Known-blockers is prose)
 ```markdown
