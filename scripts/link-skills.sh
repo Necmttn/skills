@@ -44,7 +44,20 @@ for DEST in "${DESTS[@]}"; do
     target="$DEST/$name"
 
     if [ -e "$target" ] && [ ! -L "$target" ]; then
-      rm -rf "$target"
+      # Never delete a real dir/file we did not create - another skill pack
+      # may own this name (e.g. ~/.agents/skills/code-review). Skip and warn.
+      echo "SKIP $name: $target exists and is not a symlink (owned by something else)" >&2
+      continue
+    fi
+
+    # Only manage our own links: a symlink pointing OUTSIDE this repo belongs
+    # to another pack (e.g. research -> ~/.agents/skills/research). Leave it.
+    if [ -L "$target" ]; then
+      current="$(readlink -f "$target" 2>/dev/null || true)"
+      case "$current" in
+        "$REPO"|"$REPO"/*|"") ;;
+        *) echo "SKIP $name: $target is a foreign symlink ($current)" >&2; continue ;;
+      esac
     fi
 
     ln -sfn "$src" "$target"
