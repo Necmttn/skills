@@ -26,8 +26,8 @@ build mid-compile.
    claim (mid-merge expiry: see Merge under claim). **Claim discipline is REQUIRED, not nice-to-have:**
    several gating machines merge this repo concurrently and the claim is the ONLY serialization.
    Resources: `main-merge` (only the holder merges/rebases main - the full flow is Merge under claim
-   below; others hold their gated branches and wait their queue turn), `sim:<udid>` (pin a SEPARATE slim
-   simulator per fleet - `just sim-pin` in the apps repo, see the sim-test skill; never install/launch on a
+   below; others hold their gated branches and wait their queue turn), `sim:<udid>` (boot a SEPARATE
+   simulator per fleet - `xcrun simctl list devices available` then `boot`; never install/launch on a
    claimed sim), `ports:<app>` (better: run dev stacks from YOUR worktree so `scripts/worktree-ports.sh`
    + portless auto-offset - then no port claim is needed), `neon:<project>` (dev-DB migrations).
 3. **Before killing anything shared** (kill-port-listeners, `just * kill`, pkill, sim uninstall):
