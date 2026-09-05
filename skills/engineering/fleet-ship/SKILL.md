@@ -579,8 +579,8 @@ genuinely-`working` pane).
 5. **Recover a caught pane** via the Hard-rules credits/frozen path: close the dead pane → re-spawn
    grok→codex→fable/opus (ascending intelligence) in the same worktree → re-arm BOTH its waiter and the monitor.
    A pane that died on a usage limit WITHOUT a handoff is rebuilt from its transcript on disk - follow
-   REFERENCE 'Dead-pane rescue' (codex rollout / claude project jsonl is the carrier; brief + successor in
-   the same workspace; rename the corpse's tab MOVED).
+   REFERENCE 'Dead-pane rescue' (`bun scripts/session-handoff.ts <pane>` renders the brief from the codex
+   rollout / claude project jsonl; successor in the same workspace; rename the corpse's tab MOVED).
 6. **Distinct from the idle-waiter, not a replacement.** Waiter = "did it finish?" (git-state gate). Monitor =
    "is it still alive + progressing?" (liveness gate). Both run per active pane; a chunk is advanced only by the
    waiter's DONE/READY, rescued only by the monitor's STUCK/ERRORED/DEAD. See REFERENCE 'Liveness monitor'.

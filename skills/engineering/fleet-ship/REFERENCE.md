@@ -516,8 +516,11 @@ Live case 2026-09-05: five codex panes stopped mid-task with `You've hit your us
   A secret the owner pasted into the dead pane lives there - the successor reads it, never echoes it.
 1. Classify from the tail: finished its turn (report lost only) vs died mid-task (rescue). `tokens.limit`
    on the dead engine tells you which engines are dry; pick a successor engine that is not.
-2. Write a short brief (`~/.cache/herdr-rescue/<name>.md`): transcript path, worktree + branch,
-   `git status` at cutoff, the last thing it was doing, remaining steps, hard rules from the original brief.
+2. Render the brief with the tracked tool - it does the transcript archaeology for you:
+   `bun scripts/session-handoff.ts <pane|name|session-id> --out ~/.cache/herdr-rescue/<name>.md`
+   (goal = first user message, every later user message = the steering, files edited, commands run,
+   last assistant message = what it believed, LIVE git state = what is true, secrets redacted by
+   pattern). Append the hard rules from the original brief and the remaining steps if you know them.
 3. Spawn the successor in the SAME workspace and SAME worktree: `herdr tab create --workspace <ws>
    --cwd <wt> --label rescue:<name>-<engine>` -> `herdr agent start rescue-<name> --kind <engine>
    --pane <root_pane> -- <bypass flag>` (names: lowercase, digits, `-`, `_` only - a `.` is rejected) ->
