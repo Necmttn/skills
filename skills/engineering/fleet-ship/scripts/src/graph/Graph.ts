@@ -27,6 +27,12 @@ export const Graph = Schema.Struct({
   repo: Schema.String,
   plan: Schema.Struct({ path: Schema.String, sha: Schema.String }),
   integration_branch: Schema.String,
+  safeguards: Schema.optionalKey(Schema.Boolean),
+  scheduling: Schema.optionalKey(Schema.Struct({
+    max_in_flight: Schema.Number,
+    max_gate_queue: Schema.Number,
+    pilot: Schema.optionalKey(Schema.String),
+  })),
   runmap_issue: Schema.optionalKey(Schema.Number),
   project_number: Schema.optionalKey(Schema.Number),
   chunks: Schema.Array(Chunk),
@@ -63,6 +69,8 @@ export const emptyGraph = (input: { epic: string; repo: string; planPath: string
   repo: input.repo,
   plan: { path: input.planPath, sha: input.planSha },
   integration_branch: `epic/${input.epic}`,
+  safeguards: true,
+  scheduling: { max_in_flight: 4, max_gate_queue: 2 },
   chunks: [],
 });
 

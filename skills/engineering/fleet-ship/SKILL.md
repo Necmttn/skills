@@ -26,8 +26,8 @@ build mid-compile.
    claim (mid-merge expiry: see Merge under claim). **Claim discipline is REQUIRED, not nice-to-have:**
    several gating machines merge this repo concurrently and the claim is the ONLY serialization.
    Resources: `main-merge` (only the holder merges/rebases main - the full flow is Merge under claim
-   below; others hold their gated branches and wait their queue turn), `sim:<udid>` (boot a SEPARATE
-   simulator per fleet - `xcrun simctl list devices available` then `boot`; never install/launch on a
+   below; others hold their gated branches and wait their queue turn), `sim:<udid>` (pin a SEPARATE slim
+   simulator per fleet - `just sim-pin` in the apps repo, see the sim-test skill; never install/launch on a
    claimed sim), `ports:<app>` (better: run dev stacks from YOUR worktree so `scripts/worktree-ports.sh`
    + portless auto-offset - then no port claim is needed), `neon:<project>` (dev-DB migrations).
 3. **Before killing anything shared** (kill-port-listeners, `just * kill`, pkill, sim uninstall):
@@ -430,7 +430,8 @@ Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` ·
 (pane-side, via its SIGNAL STEP) · cross-review-started=`IN_REVIEW` · consensus-pass=`GATED` ·
 squash-merge=`MERGED` · tracer-report=`DOGFOODED`. **Mirror every transition to the ledger in the same
 wake** - `fleet log <ledger> fleet.chunk.<stage> <slug>/<chunk-id> pane=<pane_id> engine=<kind>
-pr=<url> commit=<sha> gist="<one line>"` (stage lowercase; only the fields that changed). The board
+pr=<url> commit=<sha> gist="<one line>"` (stage lowercase; only the fields that changed; in epic mode with
+safeguards every pane event also carries the `attempt_id=` minted at `building` - see Safeguards + scheduling). The board
 is the shared truth, the ledger is the offline one - `fleet state` reads the ledger, not the board.
 1. **Map FIRST.** `fleet state <ledger> --live` + `git worktree list`. Never spawn into an occupied worktree or
    duplicate work a user/agent already started. (Live lesson: this bit us.)
@@ -587,8 +588,9 @@ A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcrip
 Per chunk, right after merge (step 7), BEFORE closing:
 1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
 2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <machine-slug>/<chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
-3. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet log <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
-4. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority) and render the ledger
+3. **Publish the branch** (`git push origin feat/<chunk>` from the pane's worktree, log `ref=` on the `built` event) - a branch that exists on one machine only is not durable, and a pane close or host failure must never remove the only copy of gated work. Workers still never open PRs or merge.
+4. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet log <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
+5. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority) and render the ledger
    (`fleet state docs/superpowers/fleet-runs/<epic>.jsonl`); use `herdr session attach fleet-<epic>` for
    a local live re-entry, or `herdr --remote <host> --session fleet-<epic>` for remote UI attach WHILE the
    session still exists (teardown deletes it); never use `--remote` to drive subcommands.
@@ -641,13 +643,43 @@ held chunk without `hold=approved`. New views: `fleet next <dir>` (the frontier 
 `fleet stats <dir>` (dwell per lane/stage, retries, causes). `fleet state <dir>` groups chunks by depth and adds `step` and
 `blocked-by` columns. The single-file form `fleet <cmd> <ledger>.jsonl` still works unchanged for runs already in flight.
 
+**Safeguards + scheduling (2026-09-05, pstack learnings - `docs/research/pstack-fleet-ship-learnings.md`):** `fleet init`
+writes `"safeguards": true` and `"scheduling": {"max_in_flight": 4, "max_gate_queue": 2}` into `graph.json`; both are
+enforced by `fleet log` / `fleet next`, not by prose, and `src/ledger/safety.test.ts` + `src/run/scheduling.test.ts` are the
+crash tests. Untagged ledgers from older runs keep their old semantics.
+- **Attempt token.** `fleet log … fleet.chunk.building <slug>/<chunk>` mints `attempt_id` (the orchestrator does this, then
+  puts the token in the brief). Every later pane event (`built`, `in_review`, `gated`, `merged`) MUST carry
+  `attempt_id=<token>`; a missing, stale, or already-ended token is rejected with exit 2 - and rejected on REPLAY too
+  (`fleet state` prints `REJECTED <subject> event <id>: <reason>` in the header). A late `BUILT` from a replaced pane can no
+  longer overwrite the current attempt. A new `building` clears `hold`, `commit`, `checks`, `verdict`, `evidence`.
+- **Gate receipt bound to a commit.** `built` requires `commit=<full 40/64-hex sha>`. `gated` requires
+  `verdict=PASS evidence=verified checks=<receipt path> commit=<the built sha>`; anything else is exit 2, `--force` cannot
+  bypass it. Any later event with a different `commit=` drops the receipt (re-review). `merged` requires
+  `input_commit=<reviewed head sha>` that matches the receipt - the squash sha goes in `commit=`, the receipt attests the
+  reviewed input only. Before merging run `fleet check-gate <dir> <slug>/<chunk> --worktree <wt>`: exit 0 only when the
+  worktree is clean, `HEAD` equals the receipt commit, and a held chunk carries `hold=approved`.
+- **Rolling window.** `fleet next` counts `assigned` + active chunks against `max_in_flight` and `built|in_review|gated`
+  against `max_gate_queue`; over either limit the frontier is empty and the chunk row says why (`capacity`, `gate queue`).
+  `fleet log … assigned|spawned` re-checks the same view and refuses over-capacity spawns. Refill from `fleet next` when a
+  merge frees a slot; size the window by what YOU can gate + merge per wake, not by machine slots.
+- **Pilot.** Optional `"scheduling": {"pilot": "<chunk-id>"}` - a dependency-free, non-question chunk. Nothing else is
+  ready until the pilot reaches `dogfooded`. Use it on every run whose brief template, verify recipe, or chunk size is new.
+- **Freeze switch.** `fleet log <dir> fleet.policy.set spawn-paused text="<why>"` empties the frontier and blocks
+  `assigned|spawned` until `text=off`. Use it for a broken shared verifier or poisoned upstream; in-flight work finishes.
+- **Drain points.** Completion events are appended by panes and read at drain points only - after a merge, after a spawn
+  wave, after a review batch, before a human report. Never handle an arrival inline mid-merge.
+- **Publish before close.** A completed branch on one machine is not durable. Before `pane close`, push the branch
+  (`git push origin feat/<chunk>` - workers still never open PRs or merge) and log the ref on the `built` event
+  (`ref=origin/feat/<chunk>`); a git bundle in shared storage is the fallback when the remote is unreachable.
+  `fleet status` shows `attempt_id`, gate commit, and checks so a pane can see what the gate will demand.
+
 Type vocabulary (all `fleet.*`, the writer rejects anything else):
 | type | subject | data |
 |---|---|---|
 | `run.started` · `run.teardown` | `<epic>` | `session` `runmap` `kanban` · `closed` |
-| `policy.set` | policy name (`routing`, `steer`, `lane-file`) | `text` |
+| `policy.set` | policy name (`routing`, `steer`, `lane-file`, `spawn-paused`) | `text` (`spawn-paused`: reason, or `off`) |
 | `resource.minted` · `resource.closed` | `session:`/`workspace:`/`tab:`/`pane:`/`agent:` + id | `label` |
-| `chunk.<stage>` (assigned spawned planned building built in_review gated merged dogfooded blocked error archived closed) | `<slug>/<chunk-id>` | `pane` `engine` `wt` `pr` `commit` `gist` - same keys `fleetctl event` posts |
+| `chunk.<stage>` (assigned spawned planned building built in_review gated merged dogfooded blocked error archived closed) | `<slug>/<chunk-id>` | `pane` `engine` `wt` `pr` `commit` `gist` - same keys `fleetctl event` posts; with safeguards also `attempt_id` (every pane event), `ref` (built), `verdict` `evidence` `checks` (gated), `input_commit` (merged) |
 | `attn.opened` · `attn.closed` | `<slug>/<chunk-id>` | `ask` |
 | `cursor.advanced` | `fleetboard` | `events` `signals` |
 | `note` | free | `text` |

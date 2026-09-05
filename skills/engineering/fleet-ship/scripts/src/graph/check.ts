@@ -57,6 +57,15 @@ export const checkGraph = (graph: Graph): ReadonlyArray<Finding> => {
   const warn = (code: string, chunk: string | null, message: string) => findings.push({ level: "warning", code, chunk, message });
   const seen = new Set<string>();
   const ids = new Set(graph.chunks.map((c) => c.id));
+  if (graph.scheduling) {
+    for (const key of ["max_in_flight", "max_gate_queue"] as const) {
+      if (!Number.isSafeInteger(graph.scheduling[key]) || graph.scheduling[key] < 1) err("G130", null, `${key} must be a positive integer`);
+    }
+    if (graph.scheduling.pilot) {
+      const pilot = graph.chunks.find((c) => c.id === graph.scheduling!.pilot);
+      if (!pilot || pilot.kind === "question" || pilot.deps.length > 0) err("G131", null, "pilot must name a non-question chunk with no dependencies");
+    }
+  }
 
   for (const chunk of graph.chunks) {
     if (seen.has(chunk.id)) err("G100", chunk.id, `duplicate chunk id ${chunk.id}`);

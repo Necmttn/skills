@@ -21,6 +21,7 @@ export const renderStatus = (view: RunView, idOrSubject: string, now: Date, work
     `stage: ${chunk.stage ?? "not started"}   step: ${state?.step ?? "-"}   since: ${age(state?.time ?? null, now)} ago`,
     `next steps: ${nextSteps.join(", ") || "-"}`,
     `attempt: ${attempt ? `${attempt.n} (${attempt.cause})` : "-"}   evidence: ${state?.evidence ?? "-"}`,
+    `attempt_id: ${String(state?.data.attempt_id ?? "legacy")}   gate commit: ${state?.gate?.commit ?? "-"}   checks: ${state?.gate?.checks ?? "-"}`,
     `ready: ${chunk.ready ? "yes" : "no"} - ${chunk.reason}`,
     `blocked by: ${chunk.blockedBy.length ? chunk.blockedBy.map((dep) => `${dep} (${stageOf(dep)})`).join(", ") : "-"}`,
     `dependents: ${chunk.dependents.length ? chunk.dependents.map((dep) => `${dep} (${String(paneOf(dep))})`).join(", ") : "-"}`,

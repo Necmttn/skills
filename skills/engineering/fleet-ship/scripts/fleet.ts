@@ -5,6 +5,8 @@
  *   bun fleet.ts log <ledger> <type> <subject|-> [key=value ...]
  *   bun fleet.ts state <ledger> [--live] [--session <name>] [--tail N]
  *   bun fleet.ts teardown <ledger> --epic <epic> [--session <name>] [--archive-dir <dir>] [--execute]
+ *   bun fleet.ts init|graph check|next|status|stats <epic-dir> ...
+ *   bun fleet.ts check-gate <epic-dir> <slug>/<chunk> --worktree <path>   (clean HEAD == gate receipt commit)
  *
  * Exit codes: 0 ok · 1 herdr/teardown failure (survivors, close failed) · 2 usage or invalid ledger.
  */
@@ -21,6 +23,7 @@ import { Herdr } from "./src/herdr/Herdr.ts";
 import * as HerdrCli from "./src/herdr/HerdrCli.ts";
 import { isFleetType, makeEvent } from "./src/ledger/Event.ts";
 import { bareId, fold } from "./src/ledger/fold.ts";
+import { checkGate, eventError } from "./src/ledger/safety.ts";
 import { Ledger, layer as ledgerLayer, layerDir } from "./src/ledger/Ledger.ts";
 import { allowedTargets, EVIDENCE, isAllowed } from "./src/ledger/transitions.ts";
 import { render } from "./src/render/state.ts";
@@ -72,6 +75,8 @@ const loadRun = (dir: string) =>
     const paths = epicPaths(dir, slugOf());
     const graph = yield* loadGraph(paths.graph);
     if (!graph) return yield* new UsageError({ message: `no graph.json in ${paths.dir} - run fleet init, then write the graph` });
+    const findings = checkGraph(graph);
+    if (hasErrors(findings)) return yield* new GraphInvalid({ message: formatFindings(findings) });
     const { events, malformed } = yield* readLedger(dir);
     for (const item of malformed) yield* stderr(`fleet: ${item.file ?? paths.ledger} line ${item.line} malformed (${item.reason})`);
     const state = fold(events);
@@ -102,14 +107,36 @@ const logCommand = Command.make(
       if (epicMode && paths && type.startsWith("fleet.chunk.")) {
         const stage = type.slice("fleet.chunk.".length);
         const graph = yield* loadGraph(paths.graph);
+        if (graph && hasErrors(checkGraph(graph))) return yield* new GraphInvalid({ message: formatFindings(checkGraph(graph)) });
         const workflow = yield* loadWorkflow;
-        const { events } = yield* readLedger(target);
+        const { events, malformed } = yield* readLedger(target);
+        if (malformed.length) return yield* new UsageError({ message: "ledger contains malformed records; repair them before writing" });
         const state = fold(events);
         const id = bareId(subject);
         const spec = graph ? chunkById(graph).get(id) : undefined;
         if (graph && !spec && !adhoc) return yield* new UsageError({ message: `chunk ${id} is not in ${paths.graph} (use --adhoc for a hotfix chunk)` });
         if (adhoc) data.adhoc = true;
         const current = state.chunks.get(subject) ?? null;
+        if (graph?.safeguards && stage === "building" && data.attempt_id === undefined) {
+          // Only the orchestrator starts attempts. Workers receive this token in their brief.
+          data.attempt_id = current?.attempts.at(-1)?.ended === null ? current.data.attempt_id : crypto.randomUUID();
+        }
+        const safetyError = eventError(current, stage, data);
+        if (safetyError) return yield* new UsageError({ message: safetyError });
+        if (graph?.safeguards && ["built", "gated", "merged"].includes(stage) && !current?.data.attempt_id) {
+          return yield* new UsageError({ message: "safeguards require a building event with attempt_id first" });
+        }
+        if (graph && ["assigned", "spawned"].includes(stage) && current?.stage !== stage) {
+          const pause = state.policies.get("spawn-paused");
+          if (pause && pause !== "off") return yield* new UsageError({ message: `spawn paused: ${pause}` });
+          if (graph.scheduling && spec) {
+            // Recheck a reserved assignment without counting its own slot twice.
+            const schedulingState = { ...state, chunks: new Map(state.chunks) };
+            if (current?.stage === "assigned") schedulingState.chunks.delete(subject);
+            const candidate = joinRun(graph, schedulingState).chunks.get(id);
+            if (!candidate?.ready) return yield* new UsageError({ message: `${id}: ${candidate?.reason ?? "not ready"}` });
+          }
+        }
         const position = { stage: current?.stage ?? null, interrupted: current?.interrupted ?? null };
         if (graph && !isAllowed(position, stage)) {
           if (!force) return yield* new UsageError({ message: `illegal transition ${position.stage ?? "(none)"} -> ${stage} for ${subject}; allowed: ${allowedTargets(position).join(", ") || "none"} (or --force reason=...)` });
@@ -214,6 +241,28 @@ const statsCommand = Command.make("stats", { dir: Argument.string("epic-dir") },
   }),
 ).pipe(Command.withDescription("Time in stage per lane, retries and their causes, slowest stages, evidence on merged"));
 
+const checkGateCommand = Command.make("check-gate", {
+  dir: Argument.string("epic-dir"),
+  subject: Argument.string("machine/chunk"),
+  worktree: Flag.string("worktree"),
+}, ({ dir, subject, worktree }) => Effect.gen(function* () {
+  const run = yield* loadRun(dir);
+  if (run.malformed.length || run.state.rejected.length) return yield* new UsageError({ message: "reconcile malformed or rejected events before the gate check" });
+  const git = (args: Array<string>) => Bun.spawnSync(["git", "-C", worktree, ...args], { stdout: "pipe", stderr: "pipe" });
+  const head = git(["rev-parse", "HEAD"]);
+  const status = git(["status", "--porcelain"]);
+  if (head.exitCode !== 0 || status.exitCode !== 0) return yield* new UsageError({ message: "cannot inspect the supplied git worktree" });
+  if (status.stdout.toString().trim()) return yield* new UsageError({ message: "worktree is dirty; commit changes before checking the gate" });
+  const sha = head.stdout.toString().trim();
+  const chunk = run.state.chunks.get(subject) ?? null;
+  const problem = checkGate(chunk, sha);
+  if (problem) return yield* new UsageError({ message: problem });
+  const spec = chunkById(run.graph).get(bareId(subject));
+  if (!spec) return yield* new UsageError({ message: "chunk is absent from graph.json" });
+  if (holdOf(spec) === "human" && chunk?.data.hold !== "approved") return yield* new UsageError({ message: "owner approval is required for this commit" });
+  yield* stdout(`gate current: ${subject} ${sha}\nchecks: ${chunk!.gate!.checks}\n`);
+})).pipe(Command.withDescription("Check a clean worktree HEAD against its attempt's gate receipt; does not run tests or acquire a merge claim"));
+
 // ---- state ------------------------------------------------------------------------------
 const stateCommand = Command.make(
   "state",
@@ -274,7 +323,7 @@ const teardownCommand = Command.make(
 // ---- root -------------------------------------------------------------------------------
 const root = Command.make("fleet").pipe(
   Command.withDescription("fleet-ship ledger tooling: JSONL CloudEvents ledger, state view, teardown"),
-  Command.withSubcommands([logCommand, stateCommand, teardownCommand, graphCommand, initCommand, nextCommand, statusCommand, statsCommand]),
+  Command.withSubcommands([logCommand, stateCommand, teardownCommand, graphCommand, initCommand, nextCommand, statusCommand, statsCommand, checkGateCommand]),
 );
 
 const isCliError = (error: unknown): boolean => CliError.isCliError(error);

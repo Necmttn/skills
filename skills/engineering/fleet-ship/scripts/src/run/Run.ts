@@ -45,6 +45,13 @@ export const joinRun = (graph: Graph, state: RunState): RunView => {
     return subject ? (state.chunks.get(subject) ?? null) : null;
   };
   const stageOf = (id: string): string | null => stateOf(id)?.stage ?? null;
+  const scheduling = graph.scheduling;
+  const active = [...state.chunks].filter(([subject, c]) => (c.stage === "assigned" || ACTIVE.has(c.stage)) && byId.get(bareId(subject))?.kind !== "question").length;
+  const gateQueue = [...state.chunks.values()].filter((c) => ["built", "in_review", "gated"].includes(c.stage)).length;
+  let slots = scheduling ? Math.max(0, scheduling.max_in_flight - active) : Infinity;
+  const pause = state.policies.get("spawn-paused");
+  const pilot = scheduling?.pilot;
+  const pilotPassed = !pilot || stateOf(pilot)?.dogfooded === true;
 
   const depthMemo = new Map<string, number>();
   const depthOf = (id: string, seen: Set<string> = new Set()): number => {
@@ -65,17 +72,27 @@ export const joinRun = (graph: Graph, state: RunState): RunView => {
   for (const spec of graph.chunks) {
     const st = stateOf(spec.id);
     const stage = st?.stage ?? null;
-    const blockedBy = spec.deps.filter((dep) => !MERGED_OR_LATER.has(stageOf(dep) ?? ""));
+    const blockedBy = spec.deps.filter((dep) => !stateOf(dep)?.merged);
     const conflictHolds = [...(conflicts.get(spec.id) ?? [])].filter((other) => ACTIVE.has(stageOf(other) ?? ""));
-    const started = isStarted(stage);
+    const started = isStarted(stage) || (!!scheduling && stage === "assigned");
     const done = MERGED_OR_LATER.has(stage ?? "");
     const reasons: Array<string> = [];
     if (done) reasons.push(`already ${stage}`);
     else if (started) reasons.push(`in progress (${stage})`);
     if (blockedBy.length) reasons.push(`waits on ${blockedBy.join(", ")}`);
     if (conflictHolds.length) reasons.push(`conflicts with active ${conflictHolds.join(", ")}`);
-    const ready = !started && blockedBy.length === 0 && conflictHolds.length === 0;
     const needsAnswer = spec.kind === "question";
+    if (!needsAnswer && !started) {
+      if (pause && pause !== "off") reasons.push(`spawn paused: ${pause}`);
+      if (scheduling) {
+        if (!pilotPassed && spec.id !== pilot) reasons.push(`pilot ${pilot} needs dogfood`);
+        if (gateQueue >= scheduling.max_gate_queue) reasons.push(`gate queue full (${gateQueue}/${scheduling.max_gate_queue})`);
+        if (slots === 0) reasons.push(`in-flight capacity full (${active}/${scheduling.max_in_flight})`);
+        const selectedConflicts = frontier.filter((id) => conflicts.get(spec.id)?.has(id));
+        if (selectedConflicts.length) reasons.push(`conflicts with selected ${selectedConflicts.join(", ")}`);
+      }
+    }
+    const ready = reasons.length === 0;
     const view: ChunkView = {
       id: spec.id,
       subject: subjects.get(spec.id) ?? null,
@@ -93,6 +110,7 @@ export const joinRun = (graph: Graph, state: RunState): RunView => {
     };
     chunks.set(spec.id, view);
     if (ready) frontier.push(spec.id);
+    if (ready && !needsAnswer) slots--;
   }
   return { chunks, frontier, adhoc };
 };
