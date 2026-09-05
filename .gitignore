@@ -4,3 +4,6 @@ node_modules
 /.worktrees/
 /BRIEF.md
 /REPORT.md
+
+# git worktrees created by agents (Claude Code / herdr panes)
+/.claude/worktrees/

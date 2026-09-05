@@ -1,27 +1,17 @@
 # Engineering
 
-Skills I use daily for code work.
+Skills I use daily for code work. My own skills only - everything Matt Pocock authored lives vendored under `../vendor/mattpocock/` (see its UPSTREAM.md).
 
 ## User-invoked
 
 Reachable only when you type them (`disable-model-invocation: true`).
 
-- **[ask-matt](./ask-matt/SKILL.md)** — Ask which skill or flow fits your situation. A router over the user-invoked skills in this repo.
-- **[grill-with-docs](./grill-with-docs/SKILL.md)** — Grilling session that also builds your project's domain model, sharpening terminology and updating `CONTEXT.md` and ADRs inline.
-- **[triage](./triage/SKILL.md)** — Move issues through a state machine of triage roles.
-- **[improve-codebase-architecture](./improve-codebase-architecture/SKILL.md)** — Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.
-- **[setup-matt-pocock-skills](./setup-matt-pocock-skills/SKILL.md)** — Configure this repo for the engineering skills (issue tracker, triage labels, domain doc layout). Run once per repo.
-- **[to-issues](./to-issues/SKILL.md)** — Break any plan, spec, or PRD into independently-grabbable issues using vertical slices.
-- **[to-prd](./to-prd/SKILL.md)** — Turn the current conversation into a PRD and publish it to the issue tracker.
-- **[prototype](./prototype/SKILL.md)** — Build a throwaway prototype — a runnable terminal app for state/logic questions, or several toggleable UI variations.
+- **[fix-all-issues](./fix-all-issues/SKILL.md)** — Fix every identified issue in the current working state to production-ready quality - no workarounds, no `TODO`s, no suppressed lints - and leave the changes uncommitted.
 
 ## Model-invoked
 
 Model- or user-reachable (rich trigger phrasing so the model can reach for them).
 
-- **[wrap-up](./wrap-up/SKILL.md)** — Close down a work session or agent pane: land or file everything of value (follow-up tickets), queue human checks on a `uat` checklist issue, safe-only housekeeping, then report closed/filed/kept.
-- **[diagnosing-bugs](./diagnosing-bugs/SKILL.md)** — Disciplined diagnosis loop for hard bugs and performance regressions: reproduce → minimise → hypothesise → instrument → fix → regression-test.
-- **[tdd](./tdd/SKILL.md)** — Test-driven development with a red-green-refactor loop. Builds features or fixes bugs one vertical slice at a time.
-- **[domain-modeling](./domain-modeling/SKILL.md)** — Actively build and sharpen a project's domain model — challenge terms, stress-test with scenarios, update `CONTEXT.md` and ADRs inline.
-- **[codebase-design](./codebase-design/SKILL.md)** — Shared discipline and vocabulary for designing deep modules: small interfaces, clean seams, testable through the interface.
+- **[wrap-up](./wrap-up/SKILL.md)** — Close down a work session or agent pane: review the work against every dimension (complete, edge cases, correct, consistent, production ready, goals met), land or file everything of value (follow-up tickets), queue human checks on a `uat` checklist issue, safe-only housekeeping, then report reviewed/closed/filed/kept.
+- **[motion-principles](./motion-principles/SKILL.md)** - The twelve classic animation principles mapped to UI motion rules (staging, easing/springs, timing tokens, stagger caps, exaggeration-for-feedback) plus house rules (CLOCK RULE, extensions stay still), for designing or critiquing interface animation.
 - **[ux-psychology](./ux-psychology/SKILL.md)** - Twelve cognitive-bias rules (smart defaults, goal gradient, reciprocity, IKEA effect, loss aversion, contrast anchoring, effort justification, identity labeling, ego-driven sharing, Zeigarnik chunking, active learning, familiarity) for designing or critiquing conversion, onboarding, retention, and viral-loop UI.

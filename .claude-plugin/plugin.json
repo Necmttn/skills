@@ -19,6 +19,7 @@
     "./skills/productivity/handoff",
     "./skills/productivity/teach",
     "./skills/productivity/writing-great-skills",
-    "./skills/engineering/wrap-up"
+    "./skills/engineering/wrap-up",
+    "./skills/engineering/fix-all-issues"
   ]
 }
