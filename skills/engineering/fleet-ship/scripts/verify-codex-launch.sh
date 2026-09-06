@@ -9,7 +9,7 @@
 # brief, so the caller supplies the lane's argv from ~/.ax/fleet-routing.json, e.g.
 #   verify-codex-launch.sh 019 "$WT" w22:t5 mac-necmttn/019 fleet-lockin-prelaunch \
 #     -c 'model_reasoning_effort="medium"'
-# Without it you inherit ~/.codex/config.toml, which is model_reasoning_effort="max"
+# Without it you inherit ~/.codex/config.toml (medium as of 2026-09-06, but it drifts) - always pin the lane's effort; never "max" on a fleet lane
 # on this machine - wasteful on clear-spec mechanical chunks.
 
 set -uo pipefail
