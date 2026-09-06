@@ -435,6 +435,20 @@ safeguards every pane event also carries the `attempt_id=` minted at `building` 
 is the shared truth, the ledger is the offline one - `fleet state` reads the ledger, not the board.
 1. **Map FIRST.** `fleet state <ledger> --live` + `git worktree list`. Never spawn into an occupied worktree or
    duplicate work a user/agent already started. (Live lesson: this bit us.)
+1b. **Codex weekly quota gate (2026-09-06, user rule - live lesson: two Pro weekly windows burned in 31h).**
+   Before spawning ANY codex-engine pane (mechanical, mechanical-spark, mechanical-fast, tandem, gate), read
+   the Codex weekly window from telemetry, never from a footer: `herdr agent list | jq -r '.result.agents[] |
+   select(.agent=="codex") | .tokens.limit'` prints `7d N%` where N is percent LEFT. If no codex pane is live,
+   read the newest rollouts instead (herdr telemetry is primary; this is the fallback and may lag): `for f in $(ls -t
+   ~/.codex/sessions/*/*/*/rollout-*.jsonl | head -5); do jq -r '.payload.rate_limits? // empty | [.primary,.secondary] |
+   map(select(.!=null and .window_minutes==10080)) | .[0] | select(.!=null) | 100-.used_percent' "$f" | tail -1; done | head -1`.
+   **N at or below `FLEET_CODEX_RESERVE` (default 20) = spawn REFUSED:** route the chunk to another funded lane
+   (judgment/opus, mechanical-grok) or hold it with `BLOCKED: quota` in the ledger. The reserve is the human's
+   interactive budget; a fleet never spends it. **An account switch is NOT fresh budget:** if the active Codex
+   account changed since the run started (`codex-auth status` / registry `active_account_key`), treat the run's
+   Codex lanes as `BLOCKED: quota` until the human re-authorizes - the 2026-09-05 run chained two accounts to 100%
+   through `codex-auth` auto-switch with no human in the loop. Log the gate result every wave:
+   `fleet log <ledger> fleet.quota.gate engine=codex left=<N>% reserve=<R>% verdict=<ok|refused>`.
 2. **Worktree** (`superpowers:using-git-worktrees`): `git worktree add .claude/worktrees/<chunk> -b feat/<chunk> origin/main`
    **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
    `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
@@ -547,6 +561,9 @@ is the shared truth, the ledger is the offline one - `fleet state` reads the led
    behavior + a core smoke, report → findings become **new kanban cards** linked to the chunk. Tracer
    report received → emit `DOGFOODED` (the chunk's final lifecycle stage).
 9. **Fan out.** Spawn the next wave's *independent* chunks in parallel; sequence shared-file/reactor chunks.
+   Re-run the Codex weekly quota gate (step 1b) before EVERY wave, not once per run - the window moves while
+   panes work. A `QUOTA_HALT:` line from the monitor closes the codex lanes for the rest of the run: finish the
+   panes already working (they may still ROTATE), spawn no new codex pane, and record `BLOCKED: quota`.
 
 ## Liveness monitor - the SECOND spine (waiters catch *done*; the monitor catches *stuck/errored/dead*)
 The idle-waiter only fires on `idle|done`. A pane that **errors** (network drop, `403 out of credits`, crash,
@@ -559,7 +576,10 @@ genuinely-`working` pane).
    snapshot `{status, normalized-tail fingerprint, commits-beyond-main, dirty, tokens}` (`tokens` from
    `agent get` - `.limit` at or below `QUOTA_MIN` (default 10% left) = **QUOTA_LOW**: the monitor emits it
    once and sends the pane `ROTATE NOW` while it can still write, so a handoff exists BEFORE the
-   `usage limit` error kills it; see Herdr backchannel primitives) and diff vs the last snapshot in a state
+   `usage limit` error kills it; see Herdr backchannel primitives). The Codex WEEKLY window (`7d N%`) at or
+   below `FLEET_CODEX_RESERVE` (default 20% left) = **QUOTA_HALT**, emitted once per fleet: the orchestrator
+   spawns no further codex pane for the run (step 1b/9) - the reserve is the human's interactive budget.
+   Rotation keeps a pane alive; it never buys the fleet more budget) and diff vs the last snapshot in a state
    file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
 2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script). **Rung 0 is
    AUTOMATED and already ran before you see it:** the pi.orchestrator plugin auto-retries transient
@@ -798,6 +818,12 @@ Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
   (1) `agent read` to capture + log the draft, (2) `agent send-keys <t> Ctrl+U`, then fresh-read to confirm
   an empty prompt, (3) `agent prompt <t> "<full intended text>" --wait` and (4) confirm status flipped to
   `working`. Only then send your own steering as the next message.
+- **The fleet never spends the Codex weekly reserve (2026-09-06, user rule).** Gate every codex spawn on the
+  weekly window (`7d N%` LEFT via `herdr agent get … .tokens.limit`, or the newest rollout's `rate_limits`);
+  N at or below `FLEET_CODEX_RESERVE` (default 20) refuses the spawn and the monitor's `QUOTA_HALT` closes the
+  codex lanes for the run. Rotation and account switching (`codex-auth` auto-switch) are NOT budget: on
+  2026-09-04/05 ~20 parallel codex panes plus max-effort tandem/chunk panes drained one Pro account, auto-switch
+  chained a second, and both hit 100% in 31h with no human decision. Never pin `max` effort on a fleet lane.
 - **Name everything locally; qualify everything externally.** `agent start <chunk-id>` — the herdr NAME is
   the bare chunk id, unique only inside that server's own agent table (never generic like `codex`: detected
   labels are also targets → ambiguous locally). ALL `herdr agent *` commands (get/read/prompt/wait/rename/

@@ -319,6 +319,14 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
     # QUOTA_LOW - read the rate-limit window from telemetry (never scrape footers). "5h 100%" / "7d 0%" = percent LEFT.
     # Below QUOTA_MIN (default 10) the pane can still write: emit once and send ROTATE NOW so a handoff exists BEFORE the usage-limit error kills it.
     lim=$(printf '%s' "$g" | python3 -c 'import sys,json,re;t=json.load(sys.stdin)["result"]["agent"].get("tokens") or {};m=re.findall(r"(\d+)%",t.get("limit",""));print(min(map(int,m)) if m else "")' 2>/dev/null)
+    # QUOTA_HALT (2026-09-06, user rule) - the Codex WEEKLY window ("7d N%", N = percent LEFT) at or below FLEET_CODEX_RESERVE (default 20)
+    # closes the codex lanes for the whole run: emit ONCE per fleet; the orchestrator spawns no further codex pane (SKILL step 1b/9).
+    # Working panes are not killed - they finish or ROTATE via the QUOTA_LOW rung below. The reserve is the human's budget, not the fleet's.
+    wk=$(printf '%s' "$g" | python3 -c 'import sys,json,re;a=json.load(sys.stdin)["result"]["agent"];t=a.get("tokens") or {};m=re.search(r"7d (\d+)%",t.get("limit",""));print(m.group(1) if (m and t.get("provider")=="codex") else "")' 2>/dev/null)
+    if [ -n "$wk" ] && [ "$wk" -le "${FLEET_CODEX_RESERVE:-20}" ] && ! grep -q "^quota_halt	codex$" "$STATE"; then
+      printf 'quota_halt\tcodex\n' >> "$STATE"
+      echo "QUOTA_HALT:$REPORT_NAME codex weekly=${wk}% left <= reserve ${FLEET_CODEX_RESERVE:-20}% - spawn no further codex pane this run"
+    fi
     if [ -n "$lim" ] && [ "$lim" -le "${QUOTA_MIN:-10}" ] && ! grep -q "^quota	$N$" "$STATE"; then
       printf 'quota\t%s\n' "$N" >> "$STATE"
       echo "QUOTA_LOW:$REPORT_NAME limit=${lim}% left"
@@ -345,7 +353,7 @@ for sweep in $(seq 1 720); do          # ~24h at 120s; re-arm from the orchestra
   sleep 120   # backpressure between sweeps (fine inside a background script - same as the waiter scripts above)
 done
 ```
-Any `ERRORED:` / `STUCK:` / `DEAD:` / `BOOT_HUNG:` / `QUOTA_LOW:` line the orchestrator sees on the background task's output → read that
+Any `ERRORED:` / `STUCK:` / `DEAD:` / `BOOT_HUNG:` / `QUOTA_LOW:` / `QUOTA_HALT:` line the orchestrator sees on the background task's output → read that
 pane's tail, classify (real long compile vs frozen), and recover per Hard rules. `STALL_SWEEPS` guards a legit long suite:
 a pane running tests has *meaningful changing* output (fingerprint moves → cnt resets); only an inert pane, including a
 timer-only boot spinner, accumulates cnt. Tune the threshold up for repos with multi-minute compiles. `BOOT_HUNG` is
