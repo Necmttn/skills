@@ -143,6 +143,8 @@ const SECTIONS: Section[] = [
     id: "paid-ua",
     title: "Paid UA",
     docs: [
+      { id: "scrapecreators", title: "ScrapeCreators: competitor ad downloads", path: join(SKILLS_ENG, "scrapecreators/SKILL.md") },
+      { id: "scrapecreators-lockin", title: "ScrapeCreators: verified Lock In collection", path: join(SKILLS_ENG, "scrapecreators/references/lockin-test.md") },
       { id: "ua-skills-upstream", title: "ua-skills: notes on a third-party paid-growth pack (link only)", path: join(EXTERNAL, "ua-skills/UPSTREAM.md") },
     ],
   },

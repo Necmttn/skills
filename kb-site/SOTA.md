@@ -139,6 +139,8 @@ Maintenance: append new verdicts with a date; when a verdict changes, flip its s
 
 ## Paid UA
 
+- [sota] ScrapeCreators is our preferred tool for competitor ad media collection: a bounded test downloaded and verified 100 different files (74 videos, 26 images) for 32 credits. Search parent advertisers when app-name searches fail, and verify media bytes rather than stopping at URL export. This establishes download utility, not campaign performance. Evidence: [workflow and measured test](../skills/engineering/scrapecreators/SKILL.md), [shared collection](https://lockin-ad-research.nokta-studio.workers.dev). Owner preference recorded 2026-09-16.
+
 We run no paid UA today and no app is live, so every verdict here is `[directional]` by construction - adopted from a third-party pack, never tested by us. Re-rate them against our own numbers before betting a budget.
 
 - [directional] Minimum viable daily spend is a floor, not a target: $50/day per social or UAC channel, $30/day for Apple Search Ads. Below the floor a channel never leaves the learning phase - pause it instead of starving it. Evidence: [ua-skills](https://github.com/appeeky/ua-skills) (third-party, unlicensed - linked not mirrored; notes at `kb-site/external/ua-skills/`) cross-channel-budget. (2026-08-24)
