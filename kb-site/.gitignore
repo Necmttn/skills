@@ -1,1 +1,4 @@
 dist/
+node_modules/
+kb.roots.json
+data/.kb.lock*
