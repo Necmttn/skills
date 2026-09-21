@@ -4,7 +4,8 @@ For a trusted collaborator who starts with no context. Read this once; keep the 
 
 ## Status of online hosting
 
-**Nothing from this work is online.** This work provisions NO remote, creates no repository, and pushes nothing. Nothing has been pushed.
+~~**Nothing from this work is online.** This work provisions NO remote, creates no repository, and pushes nothing. Nothing has been pushed.~~
+**Updated 2026-09-21:** the owner decided "one git repo for now". The store lives on the public `origin` of this repository, with the two raw inventory files kept local (gitignored). The owner works solo; `sync` is not approved for `origin`, and plain `git push` is the workflow. The paragraphs below describe the facts that led to that decision and still hold for the raw inventories and for any future private remote.
 
 **Corrected 2026-09-19.** An earlier text of this section treated "this repository" as a safe place for the store. That was wrong. The facts:
 
