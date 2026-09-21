@@ -109,5 +109,5 @@ Not changed, by decision: `submission.build-state-valid` keeps release `1.0(171)
 
 ## 8. Delivery links
 
-- PR: PR_LINK
+- PR: https://github.com/Necmttn/skills/pull/102
 - Branch: `feat/app-knowledge-tracking` on https://github.com/Necmttn/skills
