@@ -1,0 +1,2 @@
+# kb-site record store: record-level 3-way merge. Each clone runs `bun kb-site/cli.ts install-merge-driver` once.
+kb-site/data/**/*.jsonl merge=kbjsonl

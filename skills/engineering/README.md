@@ -10,6 +10,8 @@ Reachable only when you type them (`disable-model-invocation: true`).
 
 ## Model-invoked
 
+- **[scrapecreators](./scrapecreators/SKILL.md)** - find competitor ads, download verified videos and images, and assess ScrapeCreators credit use.
+
 Model- or user-reachable (rich trigger phrasing so the model can reach for them).
 
 - **[wrap-up](./wrap-up/SKILL.md)** — Close down a work session or agent pane: review the work against every dimension (complete, edge cases, correct, consistent, production ready, goals met), land or file everything of value (follow-up tickets), queue human checks on a `uat` checklist issue, safe-only housekeeping, then report reviewed/closed/filed/kept.

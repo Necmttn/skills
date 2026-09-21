@@ -1,6 +1,7 @@
 {
   "name": "mattpocock-skills",
   "skills": [
+    "./skills/engineering/scrapecreators",
     "./skills/engineering/ask-matt",
     "./skills/engineering/diagnosing-bugs",
     "./skills/engineering/grill-with-docs",

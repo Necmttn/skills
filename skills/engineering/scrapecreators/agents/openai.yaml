@@ -1,0 +1,4 @@
+interface:
+  display_name: "ScrapeCreators"
+  short_description: "Find competitor ads and download verified media"
+  default_prompt: "Use $scrapecreators to find competitor ads and download their videos and images."

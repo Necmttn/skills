@@ -1,1 +1,8 @@
 dist/
+node_modules/
+kb.roots.json
+data/.kb.lock*
+
+# raw source inventories: name unreleased ideas, private repo layout and account ids; kept local
+inventory/wiki.md
+inventory/apps-repo.md
