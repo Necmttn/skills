@@ -122,6 +122,28 @@ The psychology, evidence, and worked examples behind each rule in [SKILL.md](SKI
 
 **Relation to rule 4 (IKEA):** IKEA raises exit cost via sunk investment; familiarity raises engagement via comfort and trust. The same preference-picking flow serves both - it is simultaneously the first investment and the ownership signal.
 
+## 13. Trial Risk-Reversal (Anticipated Regret / Cancellation Anxiety)
+
+**Concept:** Users don't fear the price of a trial; they fear their own forgetfulness - anticipated regret of an unwanted charge. Naming the trial length ("3-day free trial") triggers cancellation math and abandonment. Removing the time frame while promising an external safeguard (a reminder) transfers the burden of remembering from user to product.
+
+**Evidence:** Superwall data (Vah Bagdasarian, 10k+ paywall experiments; Cal AI, Quittr, Claim, Riz): 3-page trial paywalls that repeat the free framing 5-7 times and promise a trial-end reminder lift trial starts 20-40% over single-screen equivalents; best case ran a 34% trial start rate vs the 15% industry "good" benchmark. Renaming the annual plan from "Yearly $59.99" to "Try it free" (billing subordinate) was a core mechanism. A skip-trial toggle with a small no-trial discount converts ~10% of buyers to immediate purchases.
+
+**Failure mode to flag:** trial length printed on the product card; "free" appearing only in the CTA; no reminder promise anywhere in the flow; plans labeled by billing period instead of by the free trial.
+
+**Ethical constraint:** the reminder must actually be sent, and the trial length must still be discoverable (timeline block, billing disclosure) - hiding it from the card is de-emphasis, omitting it from the flow is deception.
+
+## 14. Earned Rewards (Endowed Progress + Effort Justification applied to discounts)
+
+**Concept:** A discount handed flat is evaluated as a price; a discount won is evaluated as a possession. The claim moment converts the offer from the product asking for money into the user cashing in something already theirs - endowment kicks in before any purchase.
+
+**Evidence:** Superwall experiments: spin-wheel discount presentation (spin -> land on 80% -> "claim your discount" -> discounted paywall) produced double-digit conversion uplift over showing the identical discount directly. Mechanic lifted from e-commerce (Temu/Shein-style wheel popups), which iterated discount presentation for years.
+
+**App example:** win-back placement - churned trial user reopens the app, triggers a branded reveal (wheel, scratch, stamp), lands on the discounted annual offer framed as won. Annual-only: the same experiment series found discounting weekly or monthly plans repeatedly failed.
+
+**Failure mode to flag:** discount screens that open cold with "80% OFF"; rescue offers with no claim interaction; discounted weekly/monthly plans.
+
+**Ethical constraint:** every user shown the mechanic must win the same real discount. Variable or fake odds turn a framing device into a lottery deception.
+
 ## Rule interactions
 
 - **Reciprocity + IKEA** compound in FTUE: deliver value first (reciprocity), have the user build something with it (IKEA), *then* gate. Duolingo runs both.
