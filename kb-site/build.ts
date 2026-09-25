@@ -154,6 +154,7 @@ const SECTIONS: Section[] = [
     docs: [
       { id: "growth-ops", title: "Growth-ops operating system", path: join(PLAYBOOKS, "growth-ops.md") },
       { id: "growth-tricks", title: "Growth tricks", path: join(PLAYBOOKS, "growth-tricks.md") },
+      { id: "consumerclub-upstream", title: "Consumer Club: organic UGC system (link only)", path: join(EXTERNAL, "consumerclub-organic-ugc/UPSTREAM.md") },
       { id: "analytics", title: "Analytics per app", path: join(PLAYBOOKS, "analytics-per-app.md") },
     ],
   },
