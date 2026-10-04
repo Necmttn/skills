@@ -1,6 +1,6 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge; every run gets its own herdr session (`fleet-<epic>`, torn down in one stop) and a JSONL CloudEvents ledger that `fleet state` renders into the orchestrator's per-wake view. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate parallel implementation across herdr panes for a backlog with independent chunks. Use when the user asks to ship multiple tasks as a fleet or run an unattended multi-agent build.
 ---
 
 # Fleet Ship - parallel herdr orchestration
