@@ -1,9 +1,13 @@
 ---
 name: fleet-ship
-description: Orchestrate a fleet of herdr agent panes to ship a multi-chunk backlog in parallel - one labeled pane per chunk (own git worktree), engine-routed (mechanical→codex/gpt-5.5+grok-4.5 twin lanes, judgment→fable-5, review→fable-5/opus-5), each chunk plan→TDD→cross-model-consensus-gate→merge, follow-up concerns filed as issues, tracked on a GitHub Project kanban, advanced by event-driven idle-waiters + a fleet-wide liveness monitor that catches stuck/errored/dead panes, dogfooded tracer-bullet after each merge; every run gets its own herdr session (`fleet-<epic>`, torn down in one stop) and a JSONL CloudEvents ledger that `fleet state` renders into the orchestrator's per-wake view. Use when the user wants to run many build tasks in parallel across herdr panes, act as orchestrator over claude/codex/pi agents, "ship the backlog", "orchestrate the fleet", keep an autonomous overnight build loop going, or fan out a wave-graph of chunks. Builds on herdr-agent-orchestration (low-level pane driving).
+description: Orchestrate parallel implementation across herdr panes for a backlog with independent chunks. Use when the user asks to ship multiple tasks as a fleet or run an unattended multi-agent build.
 ---
 
 # Fleet Ship - parallel herdr orchestration
+
+Before run setup, assignment, completion, rotation, or teardown, read [Durable task delivery](../herdr-agent-orchestration/references/durable-delivery.md).
+Workers publish their assigned branches and maintain draft PRs. The coordinator owns review and merge.
+Every saved research or exploration task uses the same delivery receipt.
 
 You are the **orchestrator** (run on fable-5 or opus-5). Panes do the building; you plan the waves, route engines,
 gate reviews, merge, track on a kanban, and dogfood. This skill *composes* our normal ship workflow -
@@ -426,7 +430,7 @@ has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that ski
 
 ## Per-chunk loop
 Each transition below emits its lifecycle stage to the event log (`fleetctl event <STAGE> …` - see
-Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` · commit+report=`BUILT`
+Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` · verified-remote-receipt+report=`BUILT`
 (pane-side, via its SIGNAL STEP) · cross-review-started=`IN_REVIEW` · consensus-pass=`GATED` ·
 squash-merge=`MERGED` · tracer-report=`DOGFOODED`. **Mirror every transition to the ledger in the same
 wake** - `fleet log <ledger> fleet.chunk.<stage> <slug>/<chunk-id> pane=<pane_id> engine=<kind>
@@ -511,7 +515,7 @@ is the shared truth, the ledger is the offline one - `fleet state` reads the led
    mocked dispatch was called) → gates (CONCRETE commands, named: `bun run typecheck` 0,
    `verify:effect` 0, suites green - never a meta "verify your work" line, see Opus-5-class alignment) →
    **`git add -A ':!BRIEF.md' ':!REPORT.md' && git commit` before STOP, then report as
-   `<slug>/<chunk-id>`; do NOT push/PR/merge** (uncommitted worktree = UNFINISHED to the waiter). Claude
+   `<slug>/<chunk-id>` with the verified remote SHA, draft PR URL, and committed recovery record; leave ready status and merge to the coordinator** (uncommitted worktree = UNFINISHED to the waiter). Claude
    panes get the skill NAMES (they
    have the Skill tool); codex/pi panes get the non-Claude variant with the discipline spelled out as text.
    **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
@@ -612,7 +616,7 @@ A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcrip
 Per chunk, right after merge (step 7), BEFORE closing:
 1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
 2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <machine-slug>/<chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
-3. **Publish the branch** (`git push origin feat/<chunk>` from the pane's worktree, log `ref=` on the `built` event) - a branch that exists on one machine only is not durable, and a pane close or host failure must never remove the only copy of gated work. Workers still never open PRs or merge.
+3. **Publish the branch** (`git push origin feat/<chunk>` from the pane's worktree, log `ref=` on the `built` event) - a branch that exists on one machine only is not durable, and a pane close or host failure must never remove the only copy of gated work. Workers maintain draft PRs; the coordinator owns ready status and merge.
 4. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet log <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
 5. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority) and render the ledger
    (`fleet state docs/superpowers/fleet-runs/<epic>.jsonl`); use `herdr session attach fleet-<epic>` for
@@ -620,10 +624,9 @@ Per chunk, right after merge (step 7), BEFORE closing:
    session still exists (teardown deletes it); never use `--remote` to drive subcommands.
 **Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
 Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
-**Close at COMMIT+REPORT, not at merge (2026-07-13, user rule — 11 idle panes piled up waiting out a long review queue).**
-A build pane's job ends when its branch is committed and its report is captured; the WORKTREE + BRANCH are the durable
-artifacts the gate/merge needs — the pane is not. As soon as the waiter fires READY and you've archived
-`agent read --source recent`, CLOSE the pane; run cross-review/gates against the worktree, and only tear down the
+**Close at VERIFIED REMOTE RECEIPT+REPORT, not at merge (2026-07-13, user rule — 11 idle panes piled up waiting out a long review queue).**
+A build pane's job ends when its branch and recovery record are pushed, its draft PR is current, and its report is captured; the WORKTREE + BRANCH are the durable
+artifacts the gate/merge needs — the pane is not. As soon as the waiter fires READY, verify the delivery receipt and archive the accepted result before closing the pane; run cross-review/gates against the worktree, and only tear down the
 worktree+branch after merge. Exception: a pane you expect to send back imminently (review already running, verdict
 minutes away) may stay for ONE gate cycle — a send-back to a closed pane costs a fresh spawn in the same worktree with
 the findings as the brief, which is acceptable and often cleaner (fresh context) than keeping N idle panes alive.
@@ -693,7 +696,7 @@ crash tests. Untagged ledgers from older runs keep their old semantics.
 - **Drain points.** Completion events are appended by panes and read at drain points only - after a merge, after a spawn
   wave, after a review batch, before a human report. Never handle an arrival inline mid-merge.
 - **Publish before close.** A completed branch on one machine is not durable. Before `pane close`, push the branch
-  (`git push origin feat/<chunk>` - workers still never open PRs or merge) and log the ref on the `built` event
+  (`git push -u origin HEAD` from the task worktree) and log the verified remote SHA, draft PR, recovery record, and ref on the `built` event
   (`ref=origin/feat/<chunk>`); a git bundle in shared storage is the fallback when the remote is unreachable.
   `fleet status` shows `attempt_id`, gate commit, and checks so a pane can see what the gate will demand.
 
@@ -716,8 +719,7 @@ malformed line is counted in the header and printed to stderr, never swallowed.
 **Protocol - two rules:** the FIRST command of every wake is the view with `--live`; the LAST command of
 every wake is one `fleet log` event. Read a pane tail only for a row the view flags (`gone`, `orphan`,
 `blocked`, `error`). The rotation handoff pastes the view verbatim as its state snapshot.
-**Commit cadence:** the ledger is git-tracked and append-only; commit it with the housekeeping commit
-of each merge, not per line.
+**Commit cadence:** preserve ledger checkpoints on an owned coordination branch at each completed step and before parking. Push its recovery record and update the run draft PR before rotation or a provider stop. Never wait for a merge to preserve the only run record.
 - **Run wrap-up LAST (invoke the `wrap-up` skill).** Teardown closes herdr resources and the session; wrap-up closes the
   RUN: one `follow-up`-labeled issue per unresolved concern in the run archive's REPORT sections (linked to
   the chunk's PR), UAT checkboxes appended to the scope's open `uat` issue (TestFlight build numbers to
@@ -758,7 +760,7 @@ sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
   (a) ~70-75% of context window (leaves room to write the handoff BEFORE auto-compact can fire mid-handoff);
   (b) 4-6h of active wakes as a hard wall-clock ceiling; (c) any rotation-blocking cause observed 2 cycles
   in a row = incident, rotate now; (d) user says "rotate" — immediate.
-- **Rotation is ONE atomic instruction:** write the handoff doc + commit + park with an empty prompt — never
+- **Rotation is ONE atomic instruction:** write the handoff doc + commit + push + update the draft PR + verify the delivery receipt + park with an empty prompt — never
   a sequence a watchdog must observe from outside.
 - **Handoff = pointers + fresh query results, never narrative summary** (schema in REFERENCE.md). The
   successor gets the same SOURCES the predecessor had (ledger path, kanban, agent list, event-log
