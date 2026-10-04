@@ -1,0 +1,23 @@
+{
+  "name": "kb-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "kb": "bun cli.ts",
+    "test": "bun --bun vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0-rc.112",
+    "@types/bun": "latest",
+    "typescript": "^5.9.0",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.0-rc.112"
+  }
+}
