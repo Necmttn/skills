@@ -5,6 +5,11 @@ description: Investigate a question against high-trust primary sources and captu
 
 Spin up a **background agent** to do the research, so you keep working while it reads.
 
+Before assigning repository research, read [Durable task delivery](../../../../engineering/herdr-agent-orchestration/references/durable-delivery.md).
+Give the research worker an isolated task checkout and an existing draft PR.
+Its result includes the pushed notes, verified remote SHA, PR URL, and committed recovery record.
+Preserve options and unresolved decisions before waiting for the owner.
+
 Its job:
 
 1. Investigate the question against **primary sources** — official docs, source code, specs, first-party APIs — not a secondary write-up of them. Follow every claim back to the source that owns it.

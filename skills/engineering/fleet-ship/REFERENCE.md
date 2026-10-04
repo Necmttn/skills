@@ -1,5 +1,7 @@
 # Fleet Ship - Reference
 
+Before writing a brief, accepting a result, or closing a pane, read [Durable task delivery](../herdr-agent-orchestration/references/durable-delivery.md).
+
 ## Machine-namespaced identity
 The slug minted by `fleetctl join --name <slug>` is the machine id. Keep these three values distinct:
 
@@ -163,12 +165,11 @@ machine+user (once per fleet run, ledger-cached):
 > pipe it through tail/grep before checking $? (a piped exit masked a real TS error twice)>. Then run
 > git add -A ':!BRIEF.md' ':!REPORT.md' && git commit
 > (one conventional commit; worktree-root scratch files never ship - and an uncommitted worktree is treated
-> as UNFINISHED), STOP and report as
-> `<report-name>`: commit SHA + test summary + concerns. Do NOT pause to ask how to finish; do NOT push,
-> open a PR, or merge - the orchestrator owns review + merge. SIGNAL STEP (mandatory, LAST, even on failure):
-> emit the lifecycle event - on DONE (work committed) run `bun ~/Projects/fleetboard/fleetctl.ts event
-> BUILT --machine <machine-slug> --chunk <chunk-id> --gist "<one-line gist>"` (DONE maps to BUILT at
-> commit); on BLOCKED/ERROR there is no lifecycle stage - ring
+> as UNFINISHED), then publish and report as
+> `<report-name>`: commit SHA + test summary + concerns. Push your assigned branch, update its draft PR,
+> commit the recovery record, and verify the remote delivery receipt before STOP. The orchestrator owns review and merge. SIGNAL STEP (mandatory, LAST, even on failure):
+> emit the lifecycle event - on DONE (work committed and remote delivery verified) run `bun ~/Projects/fleetboard/fleetctl.ts event
+> BUILT --machine <machine-slug> --chunk <chunk-id> --gist "<one-line gist>"` (DONE maps to BUILT after the verified remote delivery receipt); on BLOCKED/ERROR there is no lifecycle stage - ring
 > `bun ~/Projects/fleetboard/fleetctl.ts attn <fleet-id> "<report-name> BLOCKED|ERROR: <one-line gist>"`
 > and write the detail + what you need into REPORT.md at the worktree root. FALLBACK only when the board
 > is unreachable (the fleetctl command exits non-zero): append one line
@@ -189,12 +190,13 @@ machine+user (once per fleet run, ledger-cached):
 > run gates from the worktree. GATES before done: <repo gates, real exit codes - never pipe tsc through
 > tail/grep before checking $?>. Then run git add -A ':!BRIEF.md' ':!REPORT.md' && git commit (one
 > conventional commit; worktree-root scratch never ships - and an uncommitted worktree is treated as
-> UNFINISHED), STOP and report as `<report-name>`: commit SHA + test
+> UNFINISHED), then publish and report as `<report-name>`: commit SHA + test
 > summary + concerns.
-> Do NOT pause to ask how to finish; do NOT push, open a PR, or merge - the orchestrator owns review + merge. SIGNAL
+> Push your assigned branch, update its draft PR, commit the recovery record, and verify the remote delivery receipt
+> before STOP. The orchestrator owns review and merge. SIGNAL
 > STEP (mandatory, LAST, even on failure): emit the lifecycle event - on DONE (work committed) run
 > `bun ~/Projects/fleetboard/fleetctl.ts event BUILT --machine <machine-slug> --chunk <chunk-id> --gist
-> "<one-line gist>"` (DONE maps to BUILT at commit); on BLOCKED/ERROR there is no lifecycle stage - ring
+> "<one-line gist>"` (DONE maps to BUILT after the verified remote delivery receipt); on BLOCKED/ERROR there is no lifecycle stage - ring
 > `bun ~/Projects/fleetboard/fleetctl.ts attn <fleet-id> "<report-name> BLOCKED|ERROR: <one-line gist>"`
 > and write the detail + what you need into REPORT.md at the worktree root. FALLBACK only when the board
 > is unreachable (the fleetctl command exits non-zero): append one line `date -Iseconds` + " <report-name>
@@ -215,9 +217,9 @@ own context and append the block above.
 > dispatch was called (delete-the-mock heuristic: if the test still passes with the mock removed, it tests
 > nothing). Gates before done: bun run typecheck exits 0, bun run
 > verify:effect 0 errors, the <named> suites green. Keep <invariant, e.g. daemon-mode> unchanged. Then
-> COMMIT your work on the branch as one conventional commit, then STOP and report commit SHAs, a test
-> summary, and any concerns. Do NOT pause to ask how to finish, and do NOT open a PR or push or merge; the
-> orchestrator handles review + merge. Begin now.
+> COMMIT your work on the branch, publish the delivery receipt, then report commit SHAs, a test
+> summary, concerns, verified remote SHA, draft PR URL, and recovery record path. Push the assigned branch
+> and update its draft PR before STOP. The orchestrator handles review and merge. Begin now.
 
 ## Idle-waiter (the notification spine) - COMMIT-GATED
 Bare idle false-fires: a pane reports idle while *holding on a background shell* (suite/review), flapping

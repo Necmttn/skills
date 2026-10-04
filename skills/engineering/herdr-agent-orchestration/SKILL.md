@@ -5,6 +5,9 @@ description: Drive and orchestrate the AI agents running inside herdr - read the
 
 # Orchestrating herdr agents
 
+Before assigning work, accepting completion, recovering a task, or closing a pane, read [durable-delivery.md](references/durable-delivery.md).
+It defines remote branches, draft PRs, checkpoints, delivery receipts, and recovery without a live pane.
+
 herdr runs each agent in a pane backed by a persistent server, controlled through a **socket** API. You **drive** an agent by reading its pane and sending it input - and the socket is the same control plane whether the server is local or on a remote box, so one skill covers both.
 
 Two branches:

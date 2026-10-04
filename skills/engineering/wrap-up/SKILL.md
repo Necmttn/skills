@@ -34,6 +34,9 @@ problem with location and suggested fix). Every issue found here is input to
 step 3: fix now if it is minutes, otherwise it gets a follow-up issue. Nothing
 found in review dies in the review.
 
+Before accepting delivery or removing a checkout, read [Durable task delivery](../herdr-agent-orchestration/references/durable-delivery.md).
+Publish owned results, including research, in a task branch and draft PR before final reporting.
+
 ## 2. Sweep - inventory the residue
 
 Collect before acting (parallel where possible):
@@ -80,7 +83,7 @@ goes on a `uat`-labeled checklist issue, so the next ship has one list to walk:
 
 Execute autonomously ONLY what is provably safe; surface the rest:
 
-- Worktrees: remove when branch is pushed or merged (`git worktree remove` +
+- Worktrees: verify the remote delivery receipt and committed recovery record, then remove when branch is pushed or merged (`git worktree remove` +
   delete local branch; remote branch survives as the artifact). NEVER remove
   with uncommitted or unpushed work - that is a report item, not a cleanup.
 - Kill background processes/monitors this session started; free their ports.
