@@ -1,104 +1,220 @@
 {
-  "version": 1,
-  "comment": "fleet-ship engine routing - edit lanes freely; the orchestrator reads this at fleet start and on any steering sentence. Resolution order: user sentence override (run ledger) > this file > the skill's built-in table.",
+  "version": 2,
+  "comment": "fleet-ship engine routing - edit lanes freely; the orchestrator reads this at fleet start and on any steering sentence. Interactive shell aliases: xx='codex --yolo', cc='claude --dangerously-skip-permissions', aa='agy --dangerously-skip-permissions' (pass the expanded flags after '--' to 'herdr agent start --kind <codex|claude|agy>'). Resolution order: user sentence override (run ledger) > this file > the skill's built-in table.",
   "lanes": [
     {
-      "id": "mechanical",
-      "match": "clear spec, schema/validator/wiring, 1-3 files, mechanical sweeps",
+      "id": "review",
+      "match": "Required cross-engine tandem review of routine tasks: PR diffs, chunk commits, plans, reports, and user-facing copy. Escalate reactor-subtle, security-critical, architecture-spec, hold:human, high-stakes copy, or disputed tiebreak reviews to review-hard. Preserve additional technical review requirements.",
+      "engine": "cross-engine",
+      "model": "gemini-4-argon-medium (primary) | gpt-6-astra | claude-opus-5-5",
+      "effort": "medium",
+      "argv": "use reviewers[builder engine] in order ('gemini' aliases 'agy'); verify model and independence; record unavailable fallback",
+      "enabled": true,
+      "reason": "Prefer independent Gemini 4 Argon at medium effort (per owner 2026-10-30, gemini-4-argon-medium is the routine review default so Argon high is not overused; escalate to review-hard when stakes warrant). If unavailable or same-engine, use frontier Codex (gpt-6-astra) or Claude (claude-opus-5-5) from another engine. Pin and verify model identity. Lightweight models (gemini-3.8-flash-*, claude-haiku-5-5, gpt-6-luna, mini) never satisfy required review. Worker cost limits do not reduce review quality. Preserve findings across fallback and require consensus; block if no eligible frontier reviewer is available.",
+      "origin": "user 2026-10-28 & 2026-10-30: Argon-first cross-engine review; medium default for routine review, high reserved for hard review; no lightweight reviewers",
+      "reviewers": {
+        "claude": [
+          "agy --model gemini-4-argon-medium --mode plan --print \"$BRIEF\"",
+          "codex exec --model gpt-6-astra -c 'model_reasoning_effort=\"medium\"' --skip-git-repo-check --sandbox read-only \"$BRIEF\" </dev/null"
+        ],
+        "codex": [
+          "agy --model gemini-4-argon-medium --mode plan --print \"$BRIEF\"",
+          "claude --model claude-opus-5-5 --effort medium -p \"$BRIEF\""
+        ],
+        "agy": [
+          "codex exec --model gpt-6-astra -c 'model_reasoning_effort=\"medium\"' --skip-git-repo-check --sandbox read-only \"$BRIEF\" </dev/null",
+          "claude --model claude-opus-5-5 --effort medium -p \"$BRIEF\""
+        ],
+        "gemini": [
+          "codex exec --model gpt-6-astra -c 'model_reasoning_effort=\"medium\"' --skip-git-repo-check --sandbox read-only \"$BRIEF\" </dev/null",
+          "claude --model claude-opus-5-5 --effort medium -p \"$BRIEF\""
+        ]
+      }
+    },
+    {
+      "id": "review-hard",
+      "match": "Hard or high-stakes cross-engine tandem review: reactor-subtle diffs, security-critical code, architecture/design specs, hold:human merges, high-stakes copy, and disputed review tiebreaks.",
+      "engine": "cross-engine",
+      "model": "gemini-4-argon-high (primary) | gpt-6-astra | claude-fable-5-1 | claude-opus-5-5",
+      "effort": "high",
+      "argv": "use reviewers[builder engine] in order ('gemini' aliases 'agy'); verify model and independence; record unavailable fallback",
+      "enabled": true,
+      "reason": "Reserve gemini-4-argon-high (with high-effort gpt-6-astra, medium-effort claude-fable-5-1, or high-effort claude-opus-5-5 fallbacks) for reviews where deeper multi-step reasoning catches subtle concurrency, security, or architectural defects worth the extra latency and quota.",
+      "origin": "user 2026-10-30: reserve Argon high for hard review or high-stakes work",
+      "reviewers": {
+        "claude": [
+          "agy --model gemini-4-argon-high --mode plan --print \"$BRIEF\"",
+          "codex exec --model gpt-6-astra -c 'model_reasoning_effort=\"high\"' --skip-git-repo-check --sandbox read-only \"$BRIEF\" </dev/null"
+        ],
+        "codex": [
+          "agy --model gemini-4-argon-high --mode plan --print \"$BRIEF\"",
+          "claude --model claude-fable-5-1 --effort medium -p \"$BRIEF\"",
+          "claude --model claude-opus-5-5 --effort high -p \"$BRIEF\""
+        ],
+        "agy": [
+          "codex exec --model gpt-6-astra -c 'model_reasoning_effort=\"high\"' --skip-git-repo-check --sandbox read-only \"$BRIEF\" </dev/null",
+          "claude --model claude-fable-5-1 --effort medium -p \"$BRIEF\"",
+          "claude --model claude-opus-5-5 --effort high -p \"$BRIEF\""
+        ],
+        "gemini": [
+          "codex exec --model gpt-6-astra -c 'model_reasoning_effort=\"high\"' --skip-git-repo-check --sandbox read-only \"$BRIEF\" </dev/null",
+          "claude --model claude-fable-5-1 --effort medium -p \"$BRIEF\"",
+          "claude --model claude-opus-5-5 --effort high -p \"$BRIEF\""
+        ]
+      }
+    },
+    {
+      "id": "design-plan",
+      "match": "Design plans, implementation plans, wave/architecture planning, and spec/design-document authoring. Takes precedence over frontier and judgment for planning work.",
       "engine": "codex",
-      "argv": "codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort=\"medium\"",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "argv": "codex --yolo -m gpt-6-astra -c 'model_reasoning_effort=\"high\"'",
       "enabled": true,
-      "reason": "reads CLAUDE.md, cleanest fast lane (live evidence). reasoning=medium pinned: global ~/.codex/config.toml defaults max, wasteful on clear-spec mechanical work (user 2026-07-16); escalate effort with the lane on gate failure",
-      "origin": "user 2026-07-02: route all mechanical to codex"
+      "reason": "Use GPT-6-Astra explicitly at high effort for design and architecture plans (plan quality sets downstream chunk boundaries across the wave; never pin max). Do not substitute Opus or Fable for planning without a new user instruction.",
+      "origin": "user 2026-09-08: use astra for design plans from now on, update fleet routing"
     },
     {
-      "id": "mechanical-grok",
-      "match": "mechanical implementation (same class as `mechanical`); use to PARALLELIZE across engines when several mechanical tickets are unblocked and the codex lane is busy",
-      "engine": "grok",
-      "argv": "grok --always-approve",
+      "id": "copy",
+      "match": "Copywriting, UX writing, microcopy, onboarding/paywall strings, routine store/marketing copy, release notes, outreach drafts, and tone-sensitive reports.",
+      "engine": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "argv": "agy --dangerously-skip-permissions --model gemini-4-argon-medium",
       "enabled": true,
-      "reason": "grok 4.5 via grok CLI (v0.2.93). Second mechanical lane alongside codex - route to whichever has free capacity. Gate identically to codex; non-Claude pane so no Skill tool -> spell the discipline out in the brief.",
-      "origin": "user 2026-07-10: grok 4.5 available, add as second mechanical engine, parallelize with codex"
+      "reason": "Gemini 4 Argon excels at natural voice and human-touch prose. Medium effort is the default because copy tone and clarity come from Argon's base voice rather than extended thinking chains, keeping latency and quota low. Escalate to copy-high only for flagship positioning or high-stakes external communications.",
+      "origin": "user 2026-10-30: Argon for copy and human-touch work; medium default, high only for high-stakes copy"
     },
     {
-      "id": "judgment",
-      "match": "reactor-subtle, security-critical, multi-file design, seam-critical",
-      "engine": "opus",
-      "argv": "claude --model opus --dangerously-skip-permissions",
+      "id": "copy-high",
+      "match": "High-stakes copy only: flagship App Store or landing-page positioning, launch narratives, and sensitive executive, customer, or partner communications.",
+      "engine": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "argv": "agy --dangerously-skip-permissions --model gemini-4-argon-high",
       "enabled": true,
-      "reason": "deep-judgment lane; opus alias resolves to Opus 5 (2026-07-29 resweep) - thinking on by default, review quality holds at low/medium effort; always pin --model",
-      "origin": "default"
+      "reason": "Reserve gemini-4-argon-high when multi-constraint positioning, audience tradeoffs, or sensitive tone justify higher deliberation cost.",
+      "origin": "user 2026-10-30: reserve Argon high for high-stakes copy"
     },
     {
-      "id": "frontier",
-      "match": "scoping, planning, spec/design-doc authoring, and REVIEW of plans/reports/diffs ONLY - never a build lane; route builds to mechanical (codex/grok) or judgment (opus, sonnet taste floor)",
-      "engine": "fable",
-      "argv": "claude --model fable --dangerously-skip-permissions",
+      "id": "computer-use",
+      "match": "Browser automation, iOS/Android simulator driving, desktop/GUI interaction, visual QA flows, and interactive app or device dogfooding.",
+      "engine": "codex",
+      "model": "gpt-6.1-terra",
+      "effort": "medium",
+      "argv": "codex --yolo -m gpt-6.1-terra -c 'model_reasoning_effort=\"medium\"'",
       "enabled": true,
-      "reason": "Fable 5 - newest flagship, most expensive; reserve for high-leverage scoping/planning/review",
-      "origin": "user 2026-07-12: fable only for scoping/planning tasks and reviewing plans and reports (persisted from post-epic run steer)"
+      "reason": "GPT-6.1 Terra is purpose-tuned for computer use and GUI/simulator/browser driving. Medium effort tracks multi-step UI state and repro evidence reliably without burning high/max reasoning quota on every action-observe turn. If Codex hits weekly reserve, hold GUI/simulator work as BLOCKED: quota unless the owner steers an override.",
+      "origin": "user 2026-10-30: route browser/simulator/desktop/GUI-driving and device-dogfood tasks to GPT-6.1 Terra"
     },
     {
-      "id": "mechanical-spark",
-      "match": "small well-defined mechanical: crisp spec, 1-3 files, renames/mop-ups/wiring/precise edits; near-instant iteration wanted",
-      "engine": "codex-spark",
-      "argv": "codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.3-codex-spark -c model_reasoning_effort=\"medium\"",
+      "id": "mechanical",
+      "match": "Clear-spec non-UI implementation, schema/validator/wiring, 1-3 files, migrations, mechanical sweeps, and data analysis; excludes user-facing UI/API design (judgment) and copy (copy).",
+      "engine": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "argv": "codex --yolo -m gpt-6.1-sol -c 'model_reasoning_effort=\"medium\"'",
       "enabled": true,
-      "reason": "gpt-5.3-codex-spark on Cerebras: 1000+ tok/s, verified live on this account 2026-07-02 (Pro research preview). Smaller model - above gpt-5.1-codex-mini, below full gpt-5.5-codex; gate HARD, escalate to mechanical lane on any ambiguity. Preview access can vanish - on model-not-found fall back to mechanical lane. reasoning=medium pinned (global default is max)",
-      "origin": "user 2026-07-02: spark for well-defined mechanical tasks"
+      "reason": "GPT-6.1-Sol is the current Codex coding workhorse. Pin both -m gpt-6.1-sol and model_reasoning_effort=medium so launches do not inherit ~/.codex/config.toml defaults (currently gpt-6.1-terra at low). Escalate to judgment (claude-opus-5-5) on gate failure.",
+      "origin": "user 2026-07-02 & 2026-10-30: route mechanical to current Codex workhorse (GPT-6.1-Sol)"
+    },
+    {
+      "id": "mechanical-luna",
+      "match": "Small crisp-spec mechanical work: 1-3 files, renames, mop-ups, boilerplate wiring, or straightforward edits where fast turnaround matters.",
+      "engine": "codex",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "argv": "codex --yolo -m gpt-6-luna -c 'model_reasoning_effort=\"medium\"'",
+      "enabled": true,
+      "reason": "GPT-6-Luna handles small, unambiguous mechanical tasks at low cost and latency. Gate hard and escalate to mechanical (gpt-6.1-sol) on any ambiguity; never eligible for review.",
+      "origin": "2026-10-30 model refresh: GPT-6-Luna small mechanical lane"
     },
     {
       "id": "mechanical-fast",
-      "match": "critical-path mechanical chunk blocking the wave; latency matters more than credits",
+      "match": "Critical-path mechanical chunk blocking a wave where latency matters more than Codex credit burn.",
       "engine": "codex",
-      "argv": "codex --dangerously-bypass-approvals-and-sandbox -c service_tier=\"fast\" -c features.fast_mode=true",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "argv": "codex --yolo -m gpt-6.1-sol -c 'model_reasoning_effort=\"medium\"' -c 'service_tier=\"fast\"' -c features.fast_mode=true",
       "enabled": true,
-      "reason": "codex fast mode: 1.5x speed at 2.5x credit burn (gpt-5.5) - NOT free; opt in per chunk, never bulk. ChatGPT sign-in only (API key ignores it). Post-launch fallback for TUI panes: send '/fast on' + Enter",
-      "origin": "user 2026-07-02: add fast-lane variants"
+      "reason": "Codex fast tier on GPT-6.1-Sol (~1.5x speed at ~2.5x credit burn) - opt in per blocking chunk only, never bulk; ChatGPT sign-in only.",
+      "origin": "user 2026-07-02: fast-lane variant, updated to GPT-6.1-Sol"
+    },
+    {
+      "id": "mechanical-claude",
+      "match": "Cross-engine mechanical parallelism when Codex lanes are saturated, taste-floor UI implementation when Opus is saturated, or mechanical fallback when Codex weekly quota is at or below FLEET_CODEX_RESERVE.",
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "effort": "medium",
+      "argv": "claude --dangerously-skip-permissions --model claude-sonnet-5-5 --effort medium",
+      "enabled": true,
+      "reason": "Sonnet 5.5 at medium effort provides a funded non-Codex mechanical build lane (and UI taste floor) when Codex hits weekly reserve or needs cross-engine parallelism; escalate to judgment (claude-opus-5-5) on gate failure.",
+      "origin": "2026-10-30 model refresh: Sonnet 5.5 non-Codex mechanical lane"
+    },
+    {
+      "id": "judgment",
+      "match": "Reactor-subtle, security-critical, multi-file implementation, user-facing UI implementation, public API design, and complex architecture seams; excludes design-plan authoring (Astra) and copywriting (Argon).",
+      "engine": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "argv": "claude --dangerously-skip-permissions --model claude-opus-5-5 --effort high",
+      "enabled": true,
+      "reason": "Opus 5.5 at high effort handles deep unsupervised implementation, user-facing UI/API taste, and subtle invariants without max-effort token waste; always pin --model and --effort explicitly.",
+      "origin": "default, updated 2026-10-30 to Claude Opus 5.5"
     },
     {
       "id": "judgment-fast",
-      "match": "critical-path judgment chunk blocking the wave; latency matters more than cost",
-      "engine": "opus",
-      "argv": "claude --model opus --settings '{\"fastMode\": true}' --dangerously-skip-permissions",
+      "match": "Critical-path judgment chunk blocking a wave where latency matters more than cost.",
+      "engine": "claude",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "argv": "claude --dangerously-skip-permissions --model claude-opus-5-5 --effort high --settings '{\"fastMode\": true}'",
       "enabled": true,
-      "reason": "Claude fast mode via --settings flagSettings (no --fast CLI flag exists); opus 5/4.8/4.7 - no effect on fable/sonnet; billed higher while active; org allowlist + overage/cooldown can silently drop it",
-      "origin": "user 2026-07-02: add fast-lane variants"
+      "reason": "Claude fast mode on Opus 5.5 via --settings flagSettings (no --fast CLI flag); billed higher while active and subject to org/cooldown availability.",
+      "origin": "user 2026-07-02: fast-lane variant, updated to Claude Opus 5.5"
     },
     {
-      "id": "overflow",
-      "match": "burst parallelism only, when codex lane saturated",
-      "engine": "pigrok",
-      "argv": "pi --model xai-oauth/grok-4.3 --approve",
-      "enabled": false,
-      "reason": "convention mop-ups (bun:test/catchAll) + credit risk; gate hard",
-      "origin": "demoted 2026-07-02"
+      "id": "frontier",
+      "match": "Independent frontier review of high-stakes plans, reports, and diffs, plus disputed gate tiebreaks only; design and plan authoring route to design-plan (Astra). Never a build or dogfood lane.",
+      "engine": "claude",
+      "model": "claude-fable-5-1",
+      "effort": "medium",
+      "argv": "claude --model claude-fable-5-1 --effort medium -p \"$BRIEF\"",
+      "enabled": true,
+      "reason": "Fable 5.1 (claude-fable-5-1) is the Mythos-class tier above Opus 5.5; medium effort matches ~/.claude/settings.json and avoids excessive burn. Follow the Argon-first review lane when eligible and use a review-only (-p) launch without permission bypass.",
+      "origin": "user 2026-07-12: fable review-only; user 2026-09-08: design plans moved to Astra; 2026-10-30: Fable 5.1"
     },
     {
       "id": "dogfood",
-      "match": "tracer-bullet dogfood of a merged chunk: run the app, exercise the new behavior + core smoke, report findings (no fixing)",
-      "engine": "sonnet",
-      "argv": "claude --model sonnet --dangerously-skip-permissions",
+      "match": "Headless CLI/API tracer-bullet smoke or non-GUI dogfood fallback when Codex weekly quota is at reserve; route GUI, browser, simulator, desktop, and device dogfood to computer-use (gpt-6.1-terra) first.",
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "effort": "medium",
+      "argv": "claude --dangerously-skip-permissions --model claude-sonnet-5-5 --effort medium",
       "enabled": true,
-      "reason": "drive-app-and-report is taste-floor work (sonnet taste 7); escalate to opus for reactor-subtle merges; fable excluded per 2026-07-12 scoping/planning/review-only steer",
-      "origin": "user 2026-07-16: agent launches were inheriting the expensive default model on non-judgment work"
+      "reason": "Interactive app/GUI/simulator dogfood routes to computer-use (GPT-6.1 Terra). Sonnet 5.5 at medium effort handles non-GUI tracer smoke (escalate reactor-subtle smoke to claude-opus-5-5).",
+      "origin": "user 2026-07-16 & 2026-10-30: Terra leads GUI/device dogfood; Sonnet 5.5 covers headless smoke"
     },
     {
       "id": "tandem",
-      "match": "co-orchestrator: watchdog over the fable orchestrator + advisory judgment (TANDEM-JUDGE) - autonomous/overnight runs, default on; skip short attended runs",
+      "match": "Co-orchestrator watchdog over the primary orchestrator, external rotation trigger-holder, and advisory TANDEM-JUDGE on autonomous/overnight runs (skip short attended runs).",
       "engine": "codex",
-      "argv": "codex --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort=\"high\"",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "argv": "codex --yolo -m gpt-6-astra -c 'model_reasoning_effort=\"high\"'",
       "enabled": true,
-      "reason": "second frontier perspective; read-only + advisory, orchestrator keeps gate/merge. reasoning=high pinned (was max): the 2026-09-04/05 overnight runs burned two Codex Pro weekly windows in 31h; max-effort tandem/chunk panes were the largest single-session spenders (user 2026-09-06)",
-      "origin": "user 2026-07-16: restore fable+codex tandem orchestration from earlier runs"
+      "reason": "Second frontier perspective from a different engine than the orchestrator (read-only + advisory; orchestrator keeps gate/merge), capped at high effort (never max). When Codex hits weekly reserve and the orchestrator is Claude, run tandem on Argon at medium effort (agy --dangerously-skip-permissions --model gemini-4-argon-medium — 10-minute watchdog/context checks and terse TANDEM-JUDGE verdicts do not warrant argon-high latency or quota burn per sweep); use claude-opus-5-5 (--effort medium) only when the orchestrator is non-Claude.",
+      "origin": "user 2026-07-16 & 2026-09-06: cross-engine tandem watchdog capped at high effort"
     },
     {
       "id": "gate",
-      "match": "review + gate + merge",
+      "match": "Review triage, concrete repo verification gates, and merge under main-merge claim.",
       "engine": "orchestrator",
+      "model": null,
+      "effort": null,
       "argv": null,
       "enabled": true,
-      "reason": "never delegated",
+      "reason": "Never delegated.",
       "origin": "default"
     }
   ]

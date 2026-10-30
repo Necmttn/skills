@@ -5,914 +5,221 @@ description: Orchestrate parallel implementation across herdr panes for a backlo
 
 # Fleet Ship - parallel herdr orchestration
 
-Before run setup, assignment, completion, rotation, or teardown, read [Durable task delivery](../herdr-agent-orchestration/references/durable-delivery.md).
-Workers publish their assigned branches and maintain draft PRs. The coordinator owns review and merge.
-Every saved research or exploration task uses the same delivery receipt.
+Before setup, assignment, completion, rotation, or teardown, read [Durable task
+delivery](../herdr-agent-orchestration/references/durable-delivery.md).
+Workers own commits, branch publication, draft PR upkeep, and recovery records. You (the **orchestrator**, on
+Opus 5.5 or Fable 5.1) plan waves, route engines, enforce cross-engine review and repo gates, merge under claim,
+track kanban + run map, and trigger dogfooding.
 
-You are the **orchestrator** (run on fable-5 or opus-5). Panes do the building; you plan the waves, route engines,
-gate reviews, merge, track on a kanban, and dogfood. This skill *composes* our normal ship workflow -
-it just runs it across many parallel herdr panes instead of one session.
+On-demand references (load only when needed):
+- [`fleet-routing.json`](fleet-routing.json) (symlinked at `~/.ax/fleet-routing.json`): live lane routing table.
+- [`REFERENCE.md`](REFERENCE.md): engine launch protocols, verbatim brief discipline blocks, waiter/monitor
+  scripts, archive/teardown/ledger/kanban recipes, and rotation handoff schema.
+- [`references/multi-machine.md`](references/multi-machine.md): multi-machine placement, stewards, tandem
+  co-orchestrator, and dead-pane rescue.
 
-## Multi-orchestrator coordination (MANDATORY - several fleets run this repo concurrently)
-The registry is **fleetboard** - a live board at `$FLEET_BOARD_URL` (default `http://localhost:7777`,
-server + CLI in `~/Projects/fleetboard`; VPS fleets set FLEET_BOARD_URL to the Mac's tailscale addr).
-Drive it with `bun ~/Projects/fleetboard/fleetctl.ts <register|heartbeat|claim|release|attn|event|events|deregister>`
-- claim returns exit 1 + holder when a resource is taken. Heartbeat each orchestrator wake. If the
-board is unreachable, fall back to `docs/superpowers/fleet-runs/ACTIVE.md` in the target repo.
-Live lessons that forced this: a fleet rebased main under another fleet's staged merge; three merges
-landed vitest-breaking test files; a port cleanup killed a sibling fleet's dev servers and a native
-build mid-compile.
-1. **Register on run start** (epic, status), **deregister on run end**, heartbeat between.
-2. **Claims are exclusive, TTL'd + FIFO** (Fleetboard v2 Durable Object alarm; #15 owns the mechanics -
-   this documents the protocol you follow, not the DO internals). A taken claim returns exit 1 + the
-   holder + your FIFO queue position; the queue position is HONORED - your turn comes in order, never
-   jump it or poll-race it. A claim whose TTL expires **auto-releases** - an expired holder has LOST the
-   claim (mid-merge expiry: see Merge under claim). **Claim discipline is REQUIRED, not nice-to-have:**
-   several gating machines merge this repo concurrently and the claim is the ONLY serialization.
-   Resources: `main-merge` (only the holder merges/rebases main - the full flow is Merge under claim
-   below; others hold their gated branches and wait their queue turn), `sim:<udid>` (boot a SEPARATE
-   simulator per fleet - `xcrun simctl list devices available` then `boot`; never install/launch on a
-   claimed sim), `ports:<app>` (better: run dev stacks from YOUR worktree so `scripts/worktree-ports.sh`
-   + portless auto-offset - then no port claim is needed), `neon:<project>` (dev-DB migrations).
-3. **Before killing anything shared** (kill-port-listeners, `just * kill`, pkill, sim uninstall):
-   check the registry; if another fleet holds the claim, work around it or queue.
-4. **Shared merge gate**: `bun run test:vitest` from the repo root must be green before ANY merge to
-   main, whatever the fleet's own runner is (bun-runner-only gates shipped broken files three times).
-5. **The bell - single attention surface**: when blocked on a human decision or a must-see finding,
-   `fleetctl attn <fleet-id> "<one-line ask>"` (shows on the board + ntfy phone push) - plus
-   PushNotification when running on the user's Mac. Never ring for routine progress; the user watches
-   the board's attention list as the only inbox and expects silence otherwise. Poll `/state` for the
-   user's typed answer on your item after ringing.
-6. **Name your orchestrator pane/tab** (`herdr tab create --label "orchestrator:<epic>"`) so
-   `herdr agent list` yields a truthful census.
-7. **Start the run's own herdr session + open its ledger.** One session per fleet run, named
-   `fleet-<epic>`. `herdr session list` first - reuse it if it is already running; otherwise start it
-   headless: `nohup herdr --session fleet-<epic> server </dev/null >/dev/null 2>&1 &` (no `setsid` - macOS
-   has none; probed 2026-09-03, the server survives the spawning shell), then poll
-   `herdr --session fleet-<epic> agent list` until it answers (~2s). YOUR orchestrator pane stays in the
-   default session (the human sees it without attaching; `session stop` can never kill it). From here on
-   EVERY command that touches a fleet resource carries the prefix `herdr --session fleet-<epic> …`
-   (remote: `ssh <host> 'herdr --session fleet-<epic> …'`; the same session name on every machine).
-   The ledger is `docs/superpowers/fleet-runs/<epic>.jsonl` in the target repo, written ONLY through
-   the `fleet` CLI - `fleet` below means `bun ~/.claude/skills/fleet-ship/scripts/fleet.ts` (TypeScript on
-   Effect 4; `bun install` once in that `scripts/` dir; `alias fleet='bun ~/.claude/skills/fleet-ship/scripts/fleet.ts'`
-   per shell) - see 'Ledger + state view'. First three events, in this order:
-   `fleet log <ledger> fleet.run.started <epic> session=fleet-<epic> runmap=<url> kanban=<url>`,
-   `fleet log <ledger> fleet.resource.minted session:fleet-<epic> label=fleet-<epic>`, and one
-   `fleet.policy.set` per routing/steering rule in force (lane file version included).
+## Composed skills (invoke, do not reinvent)
+- **Drive panes:** `herdr-agent-orchestration` (`agent list/get/read/prompt/wait`, `pane split/rename/close`,
+  `tab create/list/rename`).
+- **Plan:** wave, architecture, design, and implementation plans route to the `design-plan` lane (`gpt-6-astra`
+  `high`); inside an assigned Claude build pane, `superpowers:writing-plans` handles its short per-chunk task
+  decomposition. Ambiguous design chunks in unattended mode use parallel design-exploration
+  (`superpowers:dispatching-parallel-agents` / `design-an-interface`) producing options marked
+  **`AWAITING-DECISION`** (`✋` + bell; never run interactive `superpowers:brainstorming` unattended, and never
+  decide the human's side).
+- **Build:** `superpowers:subagent-driven-development` (TDD + git worktrees). **Seam rule
+  (`testing-anti-patterns.md`):** mock only non-deterministic leaves (LLM, clock, network), never the code path
+  under test.
+- **Review & finish:** cross-engine tandem review (`review` / `review-hard` lane) + `/review-all` +
+  `superpowers:receiving-code-review` → concrete repo gates → `superpowers:finishing-a-development-branch`.
+  (`superpowers:verification-before-completion` is retired; name concrete gate commands, never stack
+  "double-check your work" ceremony on frontier panes.)
+- **Subagent dispatch (`efficient-dispatch`):** classify every `Agent` call so mechanical work never inherits
+  the orchestrator model: pure locate/search → `model:'haiku'`; mechanical implementer/fix/Codex-exec wrapper →
+  `model:'sonnet', effort:'low'`; judgment/review → explicit frontier model. **Never use Haiku for panes,
+  builds, or any review/judgment.**
+- **Dogfood & closure:** `dogfood` after runtime merges; `wrap-up` after `fleet teardown`.
 
-### Merge under claim - the ONLY way anything lands on main
-Merge-worthiness = the FULL fleet-ship workflow passed WHEREVER the chunk ran (plan → cheap-lane build →
-multi-agent review → feedback traced → final smart-model review - i.e. per-chunk-loop step 6's cross-model
-consensus gate, UNCHANGED and referenced here, not redefined). Run that gate on YOUR OWN machine BEFORE
-claiming - a claim held while you still review starves the queue. Passing the chain on ANY machine is
-sufficient - NO central re-review. Central merge queue REJECTED (#6, verbatim): it "re-runs suites already
-run, idles branches on one machine's availability, recreates the single-machine dependency" - that is why
-the passing-workflow-on-any-machine model is used instead. The flow (ordered; no step skippable):
-1. **Claim** `main-merge` - or take your FIFO queue position and wait your turn (do other work; never
-   poll-race or jump the queue).
-2. **Rebase** the gated branch on latest main (only the holder may touch main).
-3. **Repo-root gate LOCALLY:** the repo's FULL root gate (`bun run test:vitest`-equivalent from the repo
-   root, whatever the fleet's own runner - the Shared merge gate rule above) runs green on the MERGING
-   machine, before the merge.
-4. **Re-assert the claim, then squash-merge** to main. Step 3's local root gate can outrun the TTL, so at
-   this irreversible instant re-verify the claim is STILL yours; merge + push ONLY under a live claim - if it
-   expired, do NOT merge, drop to abort + re-queue below. (#15's DO fences the push so an expired holder's
-   merge is rejected - naming the re-check point here; the enforcement is #15's.)
-5. **Emit `MERGED`** (`fleetctl event MERGED --machine <slug> --chunk <chunk-id> …` - the lifecycle
-   event; see Child→parent lifecycle events).
-6. **Release** the claim.
-**TTL expiry mid-merge: abort + re-queue, NEVER half-merge.** The expired claim auto-releases and the next
-holder may touch main - so on expiry (or on noticing you have outlived the TTL): abort the in-flight
-rebase/merge (`git rebase --abort` / `git merge --abort`; main stays untouched, your gated branch is
-durable), re-enter the FIFO queue, and on reacquire restart from step 2 - main has moved. Steps 2-5 happen
-ONLY while you verifiably hold the claim.
-Hold-tagged chunks stop at GATED for the human before this flow - see Held chunks below (#33). Forward
-pointers, out of scope here: chunk→machine placement stays on the Mac (#35); claim DO/alarm internals are
-Fleetboard v2 (#15). This protocol is E2E-verified by the tracer bullet (skills#13), not a unit suite.
+Claude panes invoke installed skills directly after a per-machine skill probe (`REFERENCE.md` § *Pane Briefs*);
+Codex and Antigravity (`agy`) panes lack Claude's `Skill` tool and receive the inline non-Claude discipline
+block.
 
-### Held chunks - hold:human stops at GATED (skills#33)
-Autonomous merge on workflow pass is the DEFAULT - a hold is the named exception, never a new gate on
-everything. The Mac scheduler tags `hold:human` (or `hold:central`) at ASSIGNMENT on exactly three chunk
-classes: **reactor-subtle, security-critical, user-facing design** (tagging + placement are #35's - here
-you only honor a tag that arrives). The tag travels in the chunk's queue entry; whoever runs the chunk
-(steward or orchestrator) honors it per chunk:
-1. Run the FULL per-chunk loop unchanged through the consensus gate → emit `GATED` (the lifecycle
-   event) → **STOP. Do NOT claim `main-merge`.**
-2. **Ring the bell:** `fleetctl attn <fleet-id> "<slug>/<chunk-id> <one-line gate verdict> <link>"` -
-   machine-namespaced chunk id + gate verdict + a LINK the owner can open: today a PR/compare URL or the
-   chunk's run-archive section; when the access-plane link surface lands (#11) the link upgrades to its
-   artifact URL - forward pointer only, do not block on it.
-3. Flip the pane label to `✋ <chunk-id>` (the existing needs-a-HUMAN glyph, already paired with
-   `fleetctl attn`) - mirrored on the board's attention list per the sidebar invariant.
-4. **Poll `/state` for the owner's answer on YOUR attn item** (the bell rule's existing poll). Two
-   branches, both explicit:
-   - **approve** → proceed to Merge under claim above, UNCHANGED (claim/FIFO → rebase → local root gate →
-     squash-merge → `MERGED` → release).
-   - **reject / changes** → SEND-BACK: re-open the chunk with the owner's findings as the brief - a fresh
-     spawn in the SAME worktree (the Housekeeping send-back pattern), findings judged via
-     `superpowers:receiving-code-review`; the chunk re-enters the loop at build and re-rings on its next
-     `GATED`.
+## Model & engine routing
+Read `~/.ax/fleet-routing.json` (or [`fleet-routing.json`](fleet-routing.json)) at fleet start and on any
+steering sentence, and log its version via `fleet.policy.set`. Resolution order: **user sentence override (in
+ledger) > `fleet-routing.json` > table below**. Epic `graph.json` `lane` (`mechanical | judgment | design |
+design-plan | copy | computer-use`) is a coarse class resolved to a concrete `fleet-routing.json` lane via
+`match` (legacy `design` maps to `judgment` + `hold:human` for UI/API builds, `copy` for prose, or `design-plan`
+for specs). Interactive shell shortcuts are `xx` (`codex --yolo`), `cc` (`claude
+--dangerously-skip-permissions`), and `aa` (`agy --dangerously-skip-permissions`); `herdr agent start --kind
+<codex|claude|agy> --pane <id> -- <flags>` invokes the binary directly, so pass expanded flags after `--`.
 
-## Skills this composes (the chain - invoke these, don't reinvent)
-- **Drive panes:** `herdr-agent-orchestration` (read FIRST - `agent list/read/prompt/wait`, `pane send-keys/wait-output`, `agent start --kind --pane`).
-- **Plan:** mechanical chunks → `superpowers:writing-plans` only. Design/ambiguous chunks in *autonomous*
-  fleet mode → **parallel design-exploration** (`superpowers:dispatching-parallel-agents` / `design-an-interface`:
-  N independent *lens* subagents → 1 synthesizer → an options doc + recommendation, **marked AWAITING-DECISION**).
-  Interactive `superpowers:brainstorming` interviews the user - only run it when YOU/the user drive it live, never
-  in an unattended pane. (Parallel-explore generates options; it does NOT replace the user's decision.)
-- **Build:** `superpowers:subagent-driven-development` (runs `superpowers:test-driven-development` +
-  `superpowers:using-git-worktrees` internally). **Seam discipline:** its `testing-anti-patterns.md` is the authority — mock only non-deterministic *leaves* (model/LLM, clock, net), NEVER the code path the test is named after.
-- **Review:** `/review-all` = `simplify` + `/codex:review` + `/codex:adversarial-review`; plus
-  `superpowers:requesting-code-review` / `superpowers:receiving-code-review` for the judgment on findings.
-- **Route dispatches:** `efficient-dispatch` - every Agent-tool dispatch (orchestrator or Claude pane) is
-  classified mechanical-vs-judgment and mechanical ones carry an explicit cheap `model:`; `ax dispatches`
-  measures the inherit rate afterwards.
-- **Finish:** run the repo's CONCRETE gates by name (`bun run typecheck` 0, `verify:effect` 0, suites green)
-  → `superpowers:finishing-a-development-branch` (PR) → orchestrator merges → `commit` conventions.
-  (`superpowers:verification-before-completion` DISABLED 2026-07-29 per the Opus-5 prompting doc - frontier
-  panes self-verify; a brief naming a disabled skill silently degrades to prose. Concrete gate commands
-  stay in every brief; the meta "verify before claiming done" ceremony does not.)
-- **Dogfood:** `dogfood` (+ `verify` / `run` to launch the app).
-- **Wrap up the run:** `wrap-up` - run-end closure AFTER teardown-verify: follow-up tickets for every
-  unresolved REPORT.md concern and gate-waived finding, UAT checklist items for what shipped, safe-only
-  residue cleanup, closed/filed/kept report.
+| Lane | Engine / Model | Effort & why | Match |
+|---|---|---|---|
+| `review` | Cross-engine: `agy` `gemini-4-argon-medium` → `codex` `gpt-6-astra` / `claude` `claude-opus-5-5` | `medium`: frontier review quality on routine diffs/plans/copy without `high` latency or quota burn | Required cross-engine tandem review of routine diffs, plans, reports, and copy |
+| `review-hard` | Cross-engine: `agy` `gemini-4-argon-high` → `gpt-6-astra` (`high`) / `claude-fable-5-1` (`medium`) / `claude-opus-5-5` (`high`) | `high` (`medium` on Fable 5.1): deeper reasoning for subtle concurrency, security, specs, or tiebreaks | Reactor-subtle, security-critical, architecture specs, `hold:human`, disputed tiebreaks |
+| `design-plan` | `codex` `gpt-6-astra` | `high`: plan boundaries govern the whole wave; never substitute Opus/Fable without owner instruction | Design plans, implementation plans, wave/architecture planning, spec authoring |
+| `copy` / `copy-high` | `agy` `gemini-4-argon-medium` (`copy-high`: `gemini-4-argon-high`) | `medium` default (Argon's human voice comes from base taste, not long thinking); `high` only for high-stakes launch/positioning/sensitive comms | Copywriting, UX writing, store/marketing copy, release notes, outreach, tone-sensitive reports |
+| `computer-use` | `codex` `gpt-6.1-terra` | `medium`: tracks multi-step UI state + repro without burning `high` quota per action-observe turn | Browser, iOS/Android simulator, desktop/GUI driving, visual QA, interactive app/device dogfood |
+| `mechanical` | `codex` `gpt-6.1-sol` (`-fast`: `service_tier="fast"` per blocking chunk only) | `medium`: coding workhorse; pin `-m` and effort so `~/.codex/config.toml` (`gpt-6.1-terra` `low`) is not inherited | Clear-spec non-UI code, schema/validator/wiring, 1–3 files, migrations, sweeps, data analysis |
+| `mechanical-luna` | `codex` `gpt-6-luna` | `medium`: fast/cheap on trivial crisp specs; gate hard, escalate to `mechanical` on ambiguity | Small crisp 1–3 file renames, mop-ups, boilerplate wiring (never review) |
+| `mechanical-claude` | `claude` `claude-sonnet-5-5` | `medium`: non-Codex mechanical capacity (and UI taste floor when Opus is busy) | Cross-engine mechanical parallelism or Codex-quota-dry mechanical fallback |
+| `judgment` | `claude` `claude-opus-5-5` (`-fast`: `--settings '{"fastMode":true}'`) | `high`: deep unsupervised multi-file/UI/API/security/seam work without `max` burn | Reactor-subtle, security-critical, user-facing UI & API design, complex seams (excludes plans & copy) |
+| `frontier` | `claude` `claude-fable-5-1` (`-p "$BRIEF"`) | `medium`: Mythos-class review/tiebreak seat matching `~/.claude/settings.json` | High-stakes independent review & tiebreaks only; never a build or dogfood lane |
+| `dogfood` | `claude` `claude-sonnet-5-5` | `medium`: headless smoke; escalate reactor-subtle smoke to `claude-opus-5-5` | CLI/API tracer smoke or non-GUI dogfood fallback when Codex is at reserve (GUI → `computer-use`) |
+| `tandem` | `codex` `gpt-6-astra` (Codex-dry fallback: `agy` `gemini-4-argon-medium` for Claude orchestrator, `claude-opus-5-5` `medium` for non-Claude) | `high` on Astra (`medium` on fallback: 10-min watchdog sweeps & terse `TANDEM-JUDGE` verdicts do not need `argon-high` latency/burn); never `max` | Co-orchestrator watchdog & external rotation trigger on autonomous/overnight runs |
 
-Claude panes (fable/opus/sonnet) invoke these directly. **pigrok/codex panes lack the Skill tool → bake the discipline
-(plan-first, red→green TDD, gates) into their brief text.** The orchestrator (fable/opus) always owns Review + Finish.
+**Routing & engine invariants:**
+- **Always pin `--model`/`-m` and effort** on every pane and review call; never pin `max` effort on any fleet
+  lane. Keep **>1 engine lane funded** so single-provider quota exhaustion never halts the fleet; if herdr
+  cannot track an engine's status, fall back to one it tracks (`codex`, `claude`, `agy`).
+- **User-facing taste floor:** UI implementation and public API design route to `judgment` (`claude-opus-5-5`,
+  with `claude-sonnet-5-5` as floor when saturated) and copywriting routes to `copy` (`gemini-4-argon-medium`) —
+  never `mechanical` Sol/Luna solo.
+- **Standing permission to escalate:** if a cheaper lane fails gates or quality, respawn in the **same
+  worktree** on a stronger lane without asking (`intelligence > taste > cost`).
+- **Required review rules:** reviewer engine must differ from builder engine (`Argon` never reviews
+  Gemini/Argon; `Claude` never reviews Claude; `Codex` never reviews Codex). Routine review defaults to
+  `gemini-4-argon-medium` (overriding older `argon-high`-everywhere examples; reserve `gemini-4-argon-high` for
+  `review-hard`). Lightweight models (`gemini-3.8-flash-*`, `claude-haiku-5-5`, `gpt-6-luna`, mini) **never**
+  satisfy required review. Preserve open findings across fallback; block rather than downgrade if all eligible
+  frontier reviewers fail.
+- **Live steering:** apply any one-sentence user routing override immediately, log `fleet.policy.set steer`, and
+  ask once whether to persist it to `fleet-routing.json`.
 
-## Model axes (rankings, higher = better; cost = what the user actually pays, not list price)
-Intelligence = how hard a problem the model handles unsupervised. Taste = UI/UX, code quality, API design, copy.
-| model | cost | intelligence | taste | how to run |
-|---|---|---|---|---|
-| gpt-5.5 | 9 | 8 | 5 | Codex CLI ONLY - `codex exec` / `codex review` (`~/.codex/config.toml` defaults to gpt-5.5); herdr pane = codex argv below |
-| grok-4.5 | 8 | 7 | 4 | grok CLI - `grok --always-approve` (`-m` to pin model); second mechanical lane, peer of codex (2026-07-10). **BUILD lane only - grok STALLS on review workloads (live 2026-07-10): never route reviews to grok.** Cross-engine review of grok-built work → codex; review of codex-built work → fable/opus adversarial (not grok) |
-| sonnet-5 | 5 | 5 | 7 | `claude --model sonnet` / Agent `model:'sonnet'` |
-| opus-5 | 3 | 8 | 8 | `claude --model opus` / Agent `model:'opus'` - the alias resolves to Opus 5 now (2026-07-29 resweep); thinking ON by default, disable-thinking capped at effort `high` - lower effort instead of disabling thinking; review quality holds at low/medium effort (Opus-5 doc) |
-| fable-5 | 2 | 9 | 9 | `claude --model fable` / Agent `model:'fable'` - Mythos-class tier above Opus; same routing role as before |
+## Coordination, session isolation & naming
+Several fleets share the repo and machine concurrently. Coordinate via **fleetboard** (`bun
+~/Projects/fleetboard/fleetctl.ts <register|heartbeat|claim|release|attn|event|events|deregister>`,
+`$FLEET_BOARD_URL` default `http://localhost:7777`; offline fallback `docs/superpowers/fleet-runs/ACTIVE.md` +
+`/tmp/fleet-<epic>.signals`):
+1. **Lifecycle & bell:** `register` on start, `heartbeat` every wake, `deregister` after teardown. Fixed 7-stage
+   board vocabulary: `ASSIGNED → PLANNED → BUILT → IN_REVIEW → GATED → MERGED → DOGFOODED`. Ring `fleetctl attn
+   <fleet-id> "<slug>/<chunk-id> <ask>"` (+ `PushNotification` on Mac + `✋` pane glyph) **only** for human
+   decisions or unrecoverable blockers; poll `/state` for the owner's reply.
+2. **Exclusive TTL + FIFO claims:** honor queue order, never poll-race or jump, and check claims before killing
+   shared ports/processes/sims. Claims: `main-merge` (only holder rebases/merges `main`), `sim:<udid>` (boot a
+   separate simulator per fleet), `ports:<app>` (prefer worktree auto-offset ports), `neon:<project>`.
+3. **Isolated herdr session (`fleet-<epic>`):** keep your own pane in the default session
+   (`orchestrator:<epic>`). Reuse or start `nohup herdr --session fleet-<epic> server </dev/null >/dev/null 2>&1
+   &` and prefix **every** fleet command with `herdr --session fleet-<epic>` (remote: `ssh <host> 'herdr
+   --session fleet-<epic> ...'`; `--remote` is interactive UI-attach only, never for driving).
+4. **Four-level placement & naming:** `session=fleet-<epic> · workspace=<epic> · tab=fleet:<epic>`
+   (`fleet:<epic>@<slug>` off-primary) `· pane=<chunk-id>`. Herdr agent names must match `[a-z][a-z0-9_-]{0,31}`
+   and stay **bare** (`<chunk-id>`, `tandem-<epic>`, `steward-<epic>`, set once — `agent *` targets names across
+   `pane move`, while `pane *` requires `pane_id` from `agent get`). **`fleetctl event <STAGE> --machine <slug>
+   --chunk <chunk-id> [--epic <epic>]` also takes bare `<chunk-id>`** (never prefix `--chunk`, or board filters
+   silently match nothing). Qualify **every other** off-machine/durable surface (`fleet log`, `fleetctl attn`,
+   kanban cards, run map, archive, handoff, human reports `<slug>/<chunk-id> (<pane_id>)`) as
+   `<slug>/<chunk-id>`.
+5. **Sidebar legibility:** update pane labels (`herdr pane rename <pane_id> "<glyph> <chunk-id>"`) at every
+   transition: `▶` building · `⏳` built/queued · `🔎` in review · `✋` awaiting human · `❌` errored/stuck (no `✅`
+   — finished panes archive-then-close). Refresh tab counts (`fleet:<epic> ▶3 ⏳1 ✋1`) every wake.
+6. **One-time setup:** verify `herdr integration status` (`herdr integration install` for `claude`, `codex`,
+   `antigravity-cli`) and `pi.orchestrator` plugin enabled (auto-retries transient 429/5xx/stream drops); ensure
+   `/BRIEF.md` and `/REPORT.md` are gitignored in the target repo; initialize epic dir (`fleet init <home>
+   <epic> --repo <owner/name> --plan <path>` + `fleet graph check <dir>`, or legacy
+   `docs/superpowers/fleet-runs/<epic>.jsonl`) via `fleet` (`bun ~/.claude/skills/fleet-ship/scripts/fleet.ts`);
+   log `fleet.run.started`, `fleet.resource.minted session:fleet-<epic>`, `fleet.policy.set`, and
+   `fleet.cursor.advanced` (board `seq` + `SIGNALS=/tmp/fleet-<epic>.signals`); create `fleet:map` GitHub issue
+   (Destination, Decisions, Not-yet-specified fog, Out-of-scope — never pre-slice foggy work) and kanban
+   project.
 
-**How to apply (defaults, NOT limits):**
-- **Standing permission to escalate:** cheaper model's output doesn't meet the bar / fails the gate ->
-  re-run or re-spawn the chunk on a smarter model in the SAME worktree, without asking. Judge the output,
-  not the price tag. Escalating costs less than shipping mediocre work.
-- **Cost is a tie-breaker only.** Anything that ships: **intelligence > taste > cost**.
-- **Bulk/mechanical** (clear-spec implementation, data analysis, migrations) -> gpt-5.5, effectively free.
-- **User-facing** (UI, copy, API design) needs **taste >= 7** -> sonnet-5/opus-5/fable-5, never gpt-5.5 solo.
-- **Reviews of plans/implementations** -> fable-5 or opus-5, optionally gpt-5.5 (`codex review`) as an
-  extra independent perspective (`/review-all` already includes it).
-- **Subagent dispatches (Agent tool) - classify EVERY dispatch before sending, then the model field follows
-  (REQUIRED SUB-SKILL: `efficient-dispatch`).** A bare dispatch silently inherits the caller's model - from
-  the orchestrator that is fable-5, the most expensive lane (same trap as an unpinned `claude` pane; live
-  lesson 2026-07-16: fleet runs bled tokens on default-model launches for non-judgment work). Routing:
-  pure search/locate/pattern-find → `model:'haiku'`; mechanical implementer / fix subagents / bulk
-  reads-for-a-fact / codex-exec wrappers → `model:'sonnet'`; judgment (review verdicts, design synthesis,
-  gate decisions) → keep the strong model (inherit fable/opus deliberately - cheap reviewers miss real bugs).
-  Applies to the orchestrator AND to Claude panes (their discipline block carries the same rule).
-- **NEVER use Haiku for panes, builds, or any review/judgment.** The one sanctioned use is read-only
-  search/locate subagent dispatches per `efficient-dispatch`.
-- **gpt-5.5 inside subagents/Workflows** (the `model` param takes Claude models only): thin Claude wrapper
-  agent `model:'sonnet', effort:'low'` whose prompt writes a self-contained codex prompt, runs `codex exec`
-  via Bash, and returns the result; investigation/data-analysis -> `codex exec -s read-only` with a
-  self-contained prompt. In herdr panes skip the wrapper - spawn the codex CLI directly.
+## Wake & per-chunk operating loop
+**Wake discipline:** FIRST run `fleet state <dir|ledger> --live` and drain `fleetctl events --since <cursor>` (+
+`$SIGNALS` fallback) at drain points only (never mid-merge); advance `fleet.cursor.advanced`; archive+close
+orphan panes. Read pane tails (`agent read --lines 30`) only for flagged rows (`blocked`, `error`, `gone`,
+`orphan`). LAST append `fleet log` and push durable checkpoints on the coordination branch/draft PR.
 
-**Opus-5-class alignment (2026-07-29, from the "Prompting Claude Opus 5" platform doc - applies to fable-5
-and opus-5+ panes/dispatches):**
-- **Effort is the primary cost lever on Claude dispatches:** mechanical Agent dispatches carry
-  `effort:'low'` alongside `model:'sonnet'`; step up only when the gate fails. Doc: low/medium hold quality
-  at a fraction of the tokens - mirror of the codex lanes' pinned `model_reasoning_effort="medium"`.
-- **Review briefs never say "be conservative" / "only report high-severity" / "must-fix only":** an
-  Opus-5-class reviewer follows that literally and under-reports. Reviewers report EVERYTHING; severity
-  filtering is the orchestrator's triage pass, not the reviewer's self-censorship. (The gate's
-  must-fix/should-fix tiers are triage labels applied AFTER full reporting - keep them there.)
-- **No stacked self-verification on frontier panes:** fable/opus panes self-verify and self-correct; do not
-  add "double-check your work" / "re-verify before responding" / verify-with-a-subagent ceremony to their
-  briefs - it compounds with native behavior and burns tokens for nothing. Concrete repo gates (typecheck,
-  vitest, verify:effect) are task spec, not ceremony - those stay. Codex/grok/sonnet briefs KEEP the
-  spelled-out discipline; this relaxation is frontier-Claude-only. Cross-ENGINE review (consensus gate,
-  tandem) is diversity, not re-verification - unchanged.
-- **Scope pin in every brief:** one line - "deliver what the chunk spec asks, at the scope intended; note a
-  better approach in REPORT.md in one sentence rather than widening the chunk." Opus-5-class panes expand
-  scope readily; unscoped improvements become review noise and merge risk.
+1. **Frontier, file-isolation & Codex quota gate (every wave):** parallelize only ready chunks from `fleet next
+   <dir>` (enforces `max_in_flight`, `max_gate_queue`, `pilot`, `spawn-paused`, `conflicts`) that do not share
+   files/areas, verify `"already done"` claims against current code on `main`, check `git worktree list`, and
+   claim the ticket assignee. Before **any** Codex spawn, read the 7d remaining percent (`herdr agent get`
+   `.tokens.limit` `7d N%`, or `~/.codex/sessions` rollout fallback in `REFERENCE.md`) and verify active Codex
+   account identity did not auto-switch (`codex-auth` switch is not fresh budget); log `fleet.quota.gate`. If `N
+   <= FLEET_CODEX_RESERVE` (default `20%`), account switched, or `QUOTA_HALT` fired, refuse Codex spawns for the
+   run: route mechanical to `mechanical-claude`, judgment/UI to `judgment`, headless smoke to `dogfood`,
+   `tandem` to Argon (`gemini-4-argon-medium`), and hold Astra-pinned `design-plan` and Terra-pinned
+   GUI/simulator `computer-use` chunks as `BLOCKED: quota` unless the owner steers an override.
+2. **Worktree & spawn (one agent per worktree):** `git worktree add .claude/worktrees/<chunk> -b feat/<chunk>
+   origin/main` + repo install (`bun install`) before spawning. Reuse `fleet:<epic>` tab (`tab list` first; use
+   `tab create`'s `.result.root_pane.pane_id` for chunk 1, `pane split --cwd <wt> --no-focus` thereafter,
+   closing stray empty shells). Log `fleet.resource.minted` for every workspace/tab/pane/agent in the **same
+   wake** (never close unrecorded resources). Mint `attempt_id` via `fleet.chunk.building` (required on all
+   subsequent pane events). Start with pinned model + effort (`herdr agent start <chunk-id> --kind
+   <claude|codex|agy> --pane <pane_id> -- <lane flags>`; for Codex TUI use `scripts/verify-codex-launch.sh`
+   until `BOOT_READY`, leaving `BOOT_HUNG` panes intact for inspection). Rename label `▶ <chunk-id>` and emit
+   `fleetctl event ASSIGNED`.
+3. **Brief & delivery check:** write `BRIEF.md` = rich CONTEXT + `fleet status <dir> <chunk>` + `attempt_id` +
+   the matching **verbatim DISCIPLINE BLOCK** from `REFERENCE.md` (Claude code, non-Claude code, or non-code
+   `design-plan` / `copy` artifact block — each carries scope pin, `:!BRIEF.md :!REPORT.md` commit guard, remote
+   delivery receipt, and mandatory SIGNAL STEP emitting `BUILT` or `attn` + `herdr notification show` +
+   `$SIGNALS` fallback). Never send long briefs as keystrokes, and **never interrupt a `working` pane**. For
+   non-Codex panes, confirm an **empty** prompt line first (`agent prompt` appends — capture any parked draft,
+   `Ctrl+U`, verify empty, then `agent prompt <chunk-id> "Read BRIEF.md and execute it fully" --wait --until
+   working`; retry at most twice on idle Ctx 0, then ring). Emit `fleetctl event PLANNED` when the plan lands.
+4. **Waiter + liveness monitor (`REFERENCE.md` scripts):** run BOTH per active pane — the commit-gated waiter
+   (`idle|done` settle-poll + commit-or-dirty; status alone flaps on background shells) AND one fleet-wide
+   liveness monitor (`QUOTA_LOW <=10%` prompts `ROTATE NOW`; `QUOTA_HALT <=20%` closes Codex spawns; `ERRORED`
+   rings after `pi.orchestrator` retry exhaustion/fatal; `STUCK` checks normalized tail + branch commits before
+   ringing; `DEAD` respawns or runs `scripts/session-handoff.ts` rescue). Waiter timeout ≠ stuck: check pane
+   status + recent commits first and re-arm active long chunks; an `"API Error: Connection closed mid-response"`
+   tail on a clean worktree is recoverable — nudge the existing pane rather than respawning. On
+   `READY_UNCOMMITTED` (idle + dirty tree), commit excluding `BRIEF.md`/`REPORT.md` and emit `fleetctl event
+   BUILT` yourself. **Archive-then-close applies to ALL fleet-spawned panes** (build, review, fix, dogfood,
+   tandem, steward); close build panes at **verified remote delivery receipt + archived report** (before merge,
+   unless send-back is minutes away) so idle panes never pile up while worktree + pushed branch carry the gate.
+5. **Consensus gate (`IN_REVIEW` → `GATED`, never delegated):**
+   - Emit `fleetctl event IN_REVIEW` and run **cross-engine tandem review** (`review` or `review-hard`) from a
+     different engine than built the chunk; instruct reviewer to report **all** concrete findings without
+     severity self-filtering; verify reviewer model identity and that a real verdict returned (clean wrapper
+     exit ≠ PASS; fall back to direct CLI on drop).
+   - **Reuse, simplicity & seam check:** flag duplicate shared-package logic; apply delete-the-mock heuristic
+     (reject behavior chunks whose tests only assert mocked dispatches); confirm `BRIEF.md`/`REPORT.md` are
+     absent from diff.
+   - **Full verification matrix:** enumerate and run every plan-specified concrete gate from the worktree
+     (typecheck with unpiped `$?`, `verify:effect`, `bun run test:vitest`, confirming new test files actually
+     load and execute tests). Dispatch a `model:'sonnet', effort:'low'` fix subagent (or send-back) for
+     Critical/Important findings and re-gate to consensus.
+   - Record commit-bound gate receipt (`fleet log <dir> fleet.chunk.gated <slug>/<chunk-id> attempt_id=<tok>
+     commit=<40-hex> verdict=PASS evidence=verified checks=<path>`) and emit `fleetctl event GATED`.
+6. **Held chunks vs merge under claim (`MERGED`):**
+   - **`hold:human`** (tagged at assignment on `reactor-subtle`, `security-critical`, `user-facing design`):
+     **STOP at `GATED`**, set `✋ <chunk-id>`, ring `fleetctl attn` with verdict + PR link, and poll `/state`
+     (`approve` → record `hold=approved` and merge under claim; `reject` → respawn in same worktree with
+     feedback).
+   - **Merge under claim (ordered, unskippable):** run `fleet check-gate <dir> <slug>/<chunk-id> --worktree
+     <wt>` first (never hold `main-merge` while reviewing). (1) Claim `main-merge` (wait FIFO turn if taken);
+     (2) rebase branch on `origin/main`; (3) run repo-root `bun run test:vitest` green locally; (4) **re-verify
+     `main-merge` claim TTL is still yours** — on expiry, `git rebase --abort` / `git merge --abort`, re-queue
+     FIFO, and restart at step 2, never half-merge — then squash-merge and push (`fleet.chunk.merged` with
+     `input_commit=<reviewed-sha> commit=<squash-sha>`); (5) emit `fleetctl event MERGED`; (6) release
+     `main-merge`.
+7. **Archive, follow-ups, UAT, dogfood & teardown:**
+   - Append captured report (`agent read --source recent --lines 400`) + PR + gate verdict to
+     `docs/superpowers/fleet-runs/<epic>.md`, update kanban card + `fleet:map` Decisions line.
+   - File `follow-up` issues immediately at triage for every deferred concern; append real-device checks
+     (widgets, push, IAP, entitlements, camera/mic, TestFlight) to the app's **single** open `uat` issue
+     (`--label uat --label device-verify`).
+   - Remove **only** exact worktrees this run created (after confirming unoccupied + clean `git status
+     --porcelain`), delete local branch, and sweep Xcode `DerivedData` matching exact `WorkspacePath` inside
+     that worktree (`REFERENCE.md`).
+   - After runtime-affecting merges (when build/test panes are quiescent), spawn a `computer-use`
+     (`gpt-6.1-terra`) pane for GUI/browser/simulator/device dogfood (or `dogfood` `claude-sonnet-5-5` for
+     CLI/API smoke or non-GUI fallback), gated on its report file → file kanban cards → emit `fleetctl event
+     DOGFOODED`.
+   - At run end: `fleet teardown <ledger> --epic <epic> --session fleet-<epic>` (dry-run, then `--execute` to
+     archive/close exact minted IDs and stop/delete `fleet-<epic>`), confirm absent in `herdr session list`,
+     `fleetctl deregister`, then run `wrap-up`.
 
-## Engine routing (default policy — USER-STEERABLE via ~/.ax/fleet-routing.json)
-**At fleet start (and on any steering sentence), read `~/.ax/fleet-routing.json`** — the ax-idiom lane table
-(`{lanes:[{id, match, engine, argv, enabled, reason, origin}]}`). It OVERRIDES the table below; the table is
-the fallback when the file is absent/invalid. Route each chunk to the enabled lane whose `match` best fits;
-skip `enabled:false` lanes. The user edits the file to re-route (e.g. flip judgment→opus) without touching
-this skill; record which lane file version a run used in the ledger. Resolution order:
-**user sentence override (ledger) > ~/.ax/fleet-routing.json > table below.**
-| work class | engine | notes |
-|---|---|---|
-| mechanical (clear spec, schema/validator/wiring, 1-3 files, migrations, data analysis) | **codex / gpt-5.5** `codex --dangerously-bypass-approvals-and-sandbox` **AND grok-4.5** `grok --always-approve` - TWO peer lanes; route each unblocked mechanical chunk to whichever has free capacity, run both in parallel when several chunks are unblocked | codex: effectively free, reads CLAUDE.md. grok: same brief discipline (no Skill tool - spell it out); escalation ladder grok/codex → fable/opus in the SAME worktree. Keep >1 lane funded |
-| burst overflow only (both mechanical lanes saturated) | pigrok `pi --model xai-oauth/grok-4.3 --approve` | expect convention mop-ups (bun:test/catchAll) + credit risk; gate hard |
-| judgment / reactor-subtle / security / hard-unsupervised | **opus-5** `claude --model opus --dangerously-skip-permissions` | matches the json's judgment lane; fable BUILDS nothing - scoping/planning/review only (user steer 2026-07-12, the json's frontier lane); always pin `--model` |
-| user-facing: UI / copy / API design | **opus-5** (taste 8) | never gpt-5.5 solo (taste 5); sonnet-5 acceptable floor; fable reviews the result, never builds it |
-| review + gate + merge | orchestrator (fable-5 or opus-5) + `codex review` as extra independent perspective | never delegated |
+## Context hygiene & proactive rotation
+Keep state in **ledger + git + board**, never in your window: offload diffs/briefs/reports to files, read
+verdicts rather than raw diffs, delegate heavy searches to `sonnet`/`haiku` subagents, and always clear/submit
+your prompt line before parking.
 
-**Steering:** the user can override routing at ANY time with one sentence ("route all mechanical to codex",
-"no pigrok this run", "everything on opus tonight"). Apply it for the remainder of the run, write the active
-override into the run ledger (so a resumed orchestrator keeps honoring it), and ask once whether to persist
-it into this table as the new default.
-
-### Placement - after lane selection: (chunk, lane) → (machine slug, steward assignment) (skills#35)
-Lane selection above picks WHAT engine runs a chunk; placement picks WHERE. The **Mac orchestrator** - and
-only it, placement is a kept duty (#6 point 6) - composes per chunk:
-**chunk → lane (engine, resolution order above) → machine (registry match) → steward assignment.**
-- **Pinned contract (the stable interface):** inputs `(chunk, lane)` → outputs `(machine slug, steward
-  assignment incl. hold tags)`. The slug is the machine id minted by `fleetctl join --name <slug>`; the
-  assignment lands in that machine's queue on the fleetboard - the steward is the assignment TARGET
-  (Steward mode below, skills#30), or the Mac orchestrator runs the chunk itself when the target machine
-  is the Mac (a Mac-local chunk has no separate steward) - with any hold tags attached to the queue entry.
-- **Machine match = registry match (#5 schema), all tiers:** **engines-with-account** (the lane's engine
-  authed there AND its quota pool owner-consented) · **static** (capability vs the chunk's declared needs)
-  · **dynamic** (in-window now, free slot, not stale) · **policy** (owner limits honored).
-- **`~/.ax/fleet-routing.json` stays engine-policy-only (#5 point 4):** lanes never name machines - NO
-  machine-qualified lanes, NO lane×machine cross-product file. Machines live in the registry; engine
-  policy lives in the lane file; the two meet only here, at placement.
-- **Hold tagging happens HERE - at assignment, on the Mac orchestrator (#6 points 5-6):** the three held
-  classes (reactor-subtle, security-critical, user-facing design) get `hold:human` (or `hold:central`)
-  attached to the assignment; whoever runs the chunk honors the tag per Held chunks above (skills#33).
-- **Placement algorithm - filter-then-priority (deliberately dumb v1, resolved in skills#10):** WHICH
-  eligible machine wins among registry-match survivors is decided by two deterministic passes over the
-  registry fields (#5 schema). **Hard filters - a machine must pass ALL:** machine `state === "active"`
-  (drop pending/stale) · the lane's engine is authed on the machine **AND** owner-consented per the
-  machine's per-engine consent policy (default `owner-only` on machines the operator doesn't own - see gap
-  below) · **capability match** of the chunk's declared `needs` (scheduler-declared at wave planning,
-  default none -> every machine passes) against the static tier (e.g. an Xcode-needing chunk requires
-  non-null `xcodeVersion` and/or the required `simRuntimes` entry) · `inWindowNow` (window FILTER only -
-  never place out-of-window; the graceful close/drain + hard grace cap is steward RUNTIME behavior spec'd in
-  skills#10 point 3, not yet landed in Steward mode - follow-up) · `freeSlots > 0` · a chunk flagged long/judgment is filtered OUT of
-  `preemptible === true` machines. **Priority among survivors (first differing key wins, fully
-  reproducible):** pinned (`policy.preemptible === false`) before preemptible -> warm worktree/cache for the
-  repo (**skipped when the signal is absent** - no registry field carries it today, a v1 no-op; see gap) ->
-  most `freeSlots` -> alphabetical machine slug. **No migration after placement.** Mid-chunk account-dry
-  raises the existing escalation and `BLOCKED: quota` stops further placement of that engine on that machine
-  for the run. Rejected for v1 (all learnable later from the event log): scoring, quota-remaining
-  weighting, latency-aware placement. This is the policy resolved in skills#10; like the rest of the fleet
-  protocol, placement is E2E-verified by the tracer bullet (skills#13), not a unit suite.
-- **Registry gaps this v1 degrades around (documented, not invented - follow-up candidates):** (1) the
-  policy tier carries no `enginesPolicy` per-engine consent field yet (skills#10 spells it `engines_policy`) - the authed-AND-consented filter is
-  specified but reads `owner-only` on non-owned machines until that field lands; (2) no per-repo
-  warm-worktree/cache signal exists - that priority tier is a no-op today; (3) chunks carry no declared
-  `needs` capability channel beyond the scheduler's default-none - capability match passes every machine
-  until chunks declare `needs`. All three degrade gracefully now and keep the algorithm executable from
-  today's fields.
-
-## Sidebar legibility — the herdr sidebar IS the human's status board
-The user reads the sidebar to know *what needs me* vs *what's fine* — an unnamed pane, a duplicate
-workspace label, or a stale label is a housekeeping DEFECT (live audit 2026-07-16: 6 of 8 agents unnamed,
-two workspaces both labeled "apps" — illegible). Two independent surfaces, verified live:
-**agent NAME = server-local addressing** (waiters/commands target it — set once to the bare chunk id,
-NEVER rename mid-run)
-and **pane LABEL = display** (`herdr pane rename <pane_id> "<glyph> <chunk-id>"` — safe to change freely;
-name-addressing survives it). The slug minted by `fleetctl join --name <slug>` is the machine id: keep
-local herdr names/labels bare, but write `<slug>/<chunk-id>` on every surface that leaves that machine.
-- **On spawn** every fleet pane gets BOTH: local agent name = `<chunk-id>` AND local pane label
-  `▶ <chunk-id>`. The enclosing tab identifies a non-primary machine: `fleet:<epic>@<slug>`; keep
-  `fleet:<epic>` on the primary machine.
-- **Status glyphs (fixed vocabulary, update the label at every transition):**
-  `▶` building · `⏳` built, queued for gate · `🔎` under review/gate · `✋` needs a HUMAN decision
-  (always paired with `fleetctl attn`) · `❌` errored/stuck (monitor caught). No ✅ glyph — a finished pane
-  is archived-then-closed, so "done" lives on the kanban + run archive, never as sidebar clutter.
-- **Tab label carries live counts** for at-a-glance triage: `herdr tab rename <fleet-tab>
-  "fleet:<epic> ▶3 ⏳1 ✋1"` on primary or `"fleet:<epic>@<slug> ▶3 ⏳1 ✋1"` elsewhere — refresh on
-  each wake.
-- **The invariant the user relies on:** everything visible is working or queued; `✋`/`❌` means "needs me"
-  (mirrored on the fleetboard attention list); everything else is fine by construction.
-- **The fleet lives in its own session, so the default sidebar shows only your orchestrator tab.** The
-  human watches the run with `herdr session attach fleet-<epic>` in a second terminal (or
-  `herdr --remote <host> --session fleet-<epic>` for another machine). The sidebar keys (`prefix+.`
-  next agent), herdr-bar and `agent list` never cross sessions - which is exactly why the human's
-  interactive session stays clean. Say so in the run map so nobody hunts for panes in the wrong session.
-- **Sweep duty (every wake):** reconcile every fleet pane's label against its true state, refresh tab
-  counts, and archive+close any pane whose job ended. Unnamed/mislabeled panes in a fleet tab: fix on sight.
-
-## Tandem orchestrator — codex co-pilot watching the fable orchestrator
-For autonomous/overnight runs (default on; skip for short attended runs), spawn ONE codex pane at max
-reasoning alongside the orchestrator as a second pair of frontier eyes:
-`herdr pane split <orchestrator-pane> --direction down --no-focus` → `herdr agent start tandem:<epic>
---kind codex --pane <new-pane> -- --dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort="max"`
-(pane label `tandem:<epic>`; brief template in REFERENCE.md).
-- **Watchdog over the orchestrator itself** (~10 min cadence): read the orchestrator pane tail + ledger +
-  `herdr agent list`; catch starvation (no wake progress), context bloat past the rotation threshold,
-  parked-draft blocking, dead waiters/monitor. Follows the hard rules: commits-alive check before flagging
-  stuck; parked-draft submit protocol; 2 same-cause blocked cycles = incident, ring the bell.
-- **Rotation trigger-holder (skills#2):** tandem computes the rotation triggers EXTERNALLY — the
-  orchestrator's own judgment degrades exactly when its window fills, so it never self-reports. Each sweep:
-  read `herdr agent get <orchestrator> | jq .result.agent.tokens.context` - the structured context-fill
-  field (see Herdr backchannel primitives; fall back to grepping the pane's bottom lines for
-  "% ... auto-compact" / "context left" only if the field is empty); read the ledger's last rotation stamp
-  for the 4-6h wall-clock ceiling. On ANY trigger: send the orchestrator the ONE atomic instruction — "ROTATE
-  NOW: write the handoff doc (REFERENCE schema), commit it, park with an empty prompt" — and ring the bell
-  if it hasn't parked within 2 sweeps (2 same-cause blocked cycles = incident).
-- **Judgment assist:** the orchestrator sends `TANDEM-JUDGE: <question> + pointers (plan section, diff
-  paths, both reviews)` for gate tiebreaks, risky merges, ambiguous designs; tandem returns a terse verdict
-  + reasoning. ADVISORY ONLY — the orchestrator still owns review+gate+merge (never delegated).
-- **Boundaries:** tandem is read-only on the repo — it never edits, merges, spawns, or kills panes; its only
-  outputs are `agent prompt` to the orchestrator and the bell. It is a fleet-spawned pane: archive-then-close
-  at run end like every other.
-
-## Child→parent lifecycle events — panes PUSH on stop; the signals file is only the offline fallback
-Polling alone (waiter + monitor) babysits panes but gives a child NO way to tell the parent "done" or
-"stuck" — if the waiter dies (harness reap, orchestrator compaction/rotation) the pane finishes silently
-and becomes an ORPHAN (live complaint 2026-07-16). So every pane also PUSHES a durable record the
-orchestrator reads on every wake, independent of any live waiter. That record is a **lifecycle event on
-the fleetboard event log** (append-only, machine-attributed via the machine token, survives pane AND
-orchestrator death); the local `/tmp/fleet-<epic>.signals` file is kept ONLY as the offline fallback for
-when the board is unreachable:
-- **Lifecycle vocabulary (spec-fixed 7 stages; the board rejects anything else):**
-  `ASSIGNED → PLANNED → BUILT → IN_REVIEW → GATED → MERGED → DOGFOODED`. Emit with
-  `bun ~/Projects/fleetboard/fleetctl.ts event <STAGE> --machine <slug> --chunk <chunk-id> --epic <epic>
-  --gist "<one-line>"` — auth is the machine token minted by `fleetctl join`; the chunk id is stored
-  BARE (`--machine` is what scopes it — never prefix the id itself, or reads and waiters filtering by the
-  bare id silently match nothing); a bad stage exits non-zero listing the valid stages.
-- **At fleet start** record the event cursor in the ledger (last `seq` from `fleetctl events --since 0`,
-  or the cursor the ledger already holds) AND still set the fallback file
-  `SIGNALS=/tmp/fleet-<epic>.signals` (one per run): one event carries both -
-  `fleet log <ledger> fleet.cursor.advanced fleetboard events=<seq> signals=$SIGNALS`.
-- **Every brief ends with the SIGNAL STEP** (in the discipline block): on STOP — done, blocked, OR
-  errored — the pane pushes its lifecycle event: DONE (work committed) →
-  `fleetctl event BUILT --machine <slug> --chunk <chunk-id> --gist "<gist>"`; BLOCKED/ERROR have no
-  lifecycle stage → ring `fleetctl attn <fleet-id> "<slug>/<chunk-id> BLOCKED|ERROR: <gist>"` PLUS the
-  in-herdr toast `herdr notification show "<slug>/<chunk-id> BLOCKED" --sound request` (works from any
-  pane - see Herdr backchannel primitives), and put the
-  detail (what's wrong, what you need) in REPORT.md at the worktree root. FALLBACK only when the board is
-  unreachable (the fleetctl command exits non-zero): append one line
-  `date-time <machine-slug>/<chunk-id> DONE|BLOCKED|ERROR <one-line gist>` to $SIGNALS. A pane that can
-  still run a shell can always signal, even when its engine can't finish the chunk.
-- **Every orchestrator wake reads the EVENT LOG first** — `fleetctl events --since <cursor>` (filter
-  `--machine <slug>` / `--chunk` as needed) — and reconciles BEFORE trusting waiters: BUILT → gate it
-  (even if the waiter never fired); a BLOCKED/ERROR attention item → read REPORT.md, unblock or re-spawn;
-  then advance the cursor in the ledger (`fleet.cursor.advanced`). THEN read each machine's $SIGNALS (remote via
-  `ssh <host> 'cat <signals-path>'`) as the fallback path — lines from board-unreachable panes — and
-  reconcile them the same way; any evented/signaled pane still open after its chunk closed =
-  archive+close now.
-- **Orphan sweep (every wake):** the `live` block of `fleet state --live` does the cross-check for you
-  (`orphan pane` = live pane with no chunk event; `gone` = chunk whose pane vanished before a terminal stage) -
-  a pane whose chunk is already merged/abandoned, or that appears in the event log (or fallback $SIGNALS)
-  but has no live waiter, is an orphan: archive-then-close it and re-arm whatever should have caught it.
-- Events COMPLEMENT the two spines: waiter = fast wake on done; monitor = liveness; the **event log = the
-  durable truth** that survives both dying ($SIGNALS is only its offline shadow). A chunk may only be
-  considered lost if all of these are silent AND the worktree shows no commits.
-
-### Herdr backchannel primitives - 0.8.0 delta (probed live 2026-08-15; protocol 19)
-Herdr 0.8.0 renamed the driving surface and added real child→parent primitives. Old commands in briefs or
-waiters FAIL as unknown subcommands - use the new forms everywhere:
-| gone (0.7) | 0.8.0 replacement |
-|---|---|
-| `agent send <t> "<text>"` + `pane send-keys <t> Enter` | `agent prompt <t> "<text>"` - types AND submits in one call; add `--wait [--until <status>] --timeout <ms>` to also block until the turn settles (a non-working target must show a state change within 5s or it returns `agent_prompt_stalled`) |
-| `agent start <name> --cwd .. --workspace .. --tab ..` | create the pane first (`tab create --workspace <ws> --cwd <dir>` root pane, or `pane split <pane> --cwd <dir> --no-focus`), then `agent start <name> --kind <claude\|codex\|grok\|pi\|…> --pane <pane_id> -- <extra argv>` |
-| `herdr wait output\|agent-status` | `pane wait-output <pane> (--match TEXT\|--regex PAT) [--timeout MS]` and `agent wait <t> [--until <status> …]` |
-| `agent wait --status idle` + the never-request-`done` workaround | `agent wait <t>` with NO flag matches `idle\|done\|blocked` - exactly the terminal set; `--until done` is first-class. The exit-code trap is gone; the commit-gate on top stays |
-| `agent read` returns JSON (extract `.result.read.text`) | `agent read` / `pane read` print TEXT directly |
-Verified capabilities to build on (each probed on a live pane):
-- **Engine integrations (install once per machine+user - Setup step 0):** `herdr integration install
-  claude codex grok pi`. Each engine's own hook (SessionStart) reports its SESSION IDENTITY to the pane's
-  server - `agent get` then shows `agent_session.source: herdr:claude` + the real session id, so
-  pane→agent binding is authoritative, not guessed. The hook no-ops outside herdr panes (guarded on
-  `HERDR_ENV=1`). `herdr integration status` shows drift after engine updates; re-install on drift.
-- **Every pane knows its own address:** `HERDR_ENV=1`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH` sit in every
-  pane's env - a child (or any script it runs) can always reach the server about ITSELF, e.g.
-  `herdr notification show "<slug>/<chunk-id> BLOCKED" --sound request` to toast the human in herdr the
-  moment it blocks (ALONGSIDE `fleetctl attn`, never instead), and `pane report-agent "$HERDR_PANE_ID" …`
-  for SHELL panes (dev servers, log tails, monitors) to label themselves for `agent wait`/the sidebar.
-- **Wake = authoritative status transition; payload = REPORT.md + fleetboard event.** The waiter spine is
-  `agent wait <name> --timeout <ms>` (fires on idle|done|blocked) + the commit-gate; the pane's gist
-  travels via its SIGNAL STEP (`fleetctl event`/`attn`) and REPORT.md - NEVER via screen text.
-- **Screen-scraping sentinels are DEAD for claude panes (probed):** Claude Code ≥2.1.x COLLAPSES tool
-  output - a briefed `echo FLEET-SIGNAL…` ran fine but the screen showed only "Ran 1 shell command", and
-  the armed `pane wait-output --regex '^FLEET-SIGNAL…'` timed out. `pane wait-output` stays useful only
-  for raw shell panes (build logs, dev servers) and engines proven to print output verbatim.
-- **`pane report-agent` cannot override a live agent pane (probed):** herdr's own detection holds pane
-  authority; a foreign `--source` report neither changes `agent_status` nor surfaces its `--message`.
-  Do not design agent-pane signals on it.
-- **Per-pane telemetry - READ it, never scrape it:** `agent get <name>` exposes `.result.agent.tokens`:
-  `context` = context fill (e.g. `⛁ 7% (74k)`), `limit` = rate-limit window (e.g. `5h 71%`). Tandem's
-  rotation trigger and the monitor's quota-dry early warning (the grok `403 out of credits` class) read
-  THIS field instead of grepping pane footers.
-
-## Run map — wayfinder-inspired: ONE issue the human reads to understand the whole run
-The kanban shows status and the archive holds detail, but neither answers "where is this effort and what
-has been decided?" at a glance. Borrow the `wayfinder` skill's map (see that skill for the full pattern):
-- **One GitHub issue per epic, labeled `fleet:map`** — an INDEX, never a store: **Destination** (1-2 lines,
-  what shipped means), **Decisions so far** (one line per merged chunk: chunk name wrapping its PR link +
-  a one-line gist; detail stays in the PR/archive — the map never restates it), **Not yet specified** (the
-  fog), **Out of scope** (ruled out + why, so it never resurfaces). Update it in the same wake that merges
-  + archives a chunk.
-- **Refer by machine-qualified NAME everywhere** (extends the pane rule to chunks/cards/issues):
-  `<machine-slug>/<chunk-id>` wraps links in the run map, cards, lifecycle entries, and human-facing
-  reports; a bare chunk name or wall of bare `#42 #43` is ambiguous and illegible.
-- **Frontier discipline:** express chunk dependencies as native GitHub blocked-by relations where available
-  (falls back to a checklist on the map) so the tracker renders ready-vs-blocked visually. The frontier =
-  open + unblocked + unclaimed chunks — the ONLY things a wave may spawn. **Claim-first:** assign the chunk
-  issue/card to this fleet BEFORE spawning its pane (complements fleetboard claims; dedups concurrent
-  orchestrators the same way wayfinder claims tickets by assignee).
-- **Fog of war:** do NOT pre-slice unclear work into chunks at backlog time — park it in Not-yet-specified
-  and graduate it into real chunks when merges sharpen the question (test: can you state the spec precisely
-  NOW? — not "can you answer it"). Design/ambiguous chunks stay HITL: parallel-explore produces options
-  marked AWAITING-DECISION → `✋` + bell; the fleet NEVER answers the human's side of a decision.
-
-## Setup (once)
-0. **Engine integrations installed on EVERY fleet machine+user:** `herdr integration status` - any lane
-   engine showing `not installed` or a stale version → `herdr integration install claude codex grok pi`
-   (see Herdr backchannel primitives). Without them, pane→agent binding and the token telemetry the
-   waiters/monitor/tandem read are heuristic guesses. Remote: `ssh <host> 'herdr integration status'`.
-   ALSO ensure the **pi.orchestrator herdr plugin** is linked + enabled (`herdr plugin list`; source
-   `~/Projects/herdr-pi-orchestrator`) - it is the machine-wide event queue, the BLOCKED/DONE toasts,
-   AND the transient-error **auto-retry** rung (see Liveness monitor). Tune it via
-   `$(herdr plugin config-dir pi.orchestrator)/.env`.
-1. A **backlog** with a wave-graph (chunks + deps + acceptance). None? build it with `superpowers:writing-plans`
-   (after `superpowers:brainstorming` if the shape is unclear). Commit to main so every worktree pane reads it.
-2. `herdr status` up. A **GitHub Project** board (`gh project create`) - see [REFERENCE.md](REFERENCE.md).
-3. Two notification spines (REFERENCE): one **idle-waiter** background task per active pane (catches *done*)
-   AND one fleet-wide **liveness monitor** loop (catches *stuck/errored/dead*). Start the monitor when the
-   first pane spawns; keep it running the whole fleet.
-
-## Per-chunk loop
-Each transition below emits its lifecycle stage to the event log (`fleetctl event <STAGE> …` - see
-Child→parent lifecycle events): spawn=`ASSIGNED` · plan-approved=`PLANNED` · verified-remote-receipt+report=`BUILT`
-(pane-side, via its SIGNAL STEP) · cross-review-started=`IN_REVIEW` · consensus-pass=`GATED` ·
-squash-merge=`MERGED` · tracer-report=`DOGFOODED`. **Mirror every transition to the ledger in the same
-wake** - `fleet log <ledger> fleet.chunk.<stage> <slug>/<chunk-id> pane=<pane_id> engine=<kind>
-pr=<url> commit=<sha> gist="<one line>"` (stage lowercase; only the fields that changed; in epic mode with
-safeguards every pane event also carries the `attempt_id=` minted at `building` - see Safeguards + scheduling). The board
-is the shared truth, the ledger is the offline one - `fleet state` reads the ledger, not the board.
-1. **Map FIRST.** `fleet state <ledger> --live` + `git worktree list`. Never spawn into an occupied worktree or
-   duplicate work a user/agent already started. (Live lesson: this bit us.)
-1b. **Codex weekly quota gate (2026-09-06, user rule - live lesson: two Pro weekly windows burned in 31h).**
-   Before spawning ANY codex-engine pane (mechanical, mechanical-spark, mechanical-fast, tandem, gate), read
-   the Codex weekly window from telemetry, never from a footer: `herdr agent list | jq -r '.result.agents[] |
-   select(.agent=="codex") | .tokens.limit'` prints `7d N%` where N is percent LEFT. If no codex pane is live,
-   read the newest rollouts instead (herdr telemetry is primary; this is the fallback and may lag): `for f in $(ls -t
-   ~/.codex/sessions/*/*/*/rollout-*.jsonl | head -5); do jq -r '.payload.rate_limits? // empty | [.primary,.secondary] |
-   map(select(.!=null and .window_minutes==10080)) | .[0] | select(.!=null) | 100-.used_percent' "$f" | tail -1; done | head -1`.
-   **N at or below `FLEET_CODEX_RESERVE` (default 20) = spawn REFUSED:** route the chunk to another funded lane
-   (judgment/opus, mechanical-grok) or hold it with `BLOCKED: quota` in the ledger. The reserve is the human's
-   interactive budget; a fleet never spends it. **An account switch is NOT fresh budget:** if the active Codex
-   account changed since the run started (`codex-auth status` / registry `active_account_key`), treat the run's
-   Codex lanes as `BLOCKED: quota` until the human re-authorizes - the 2026-09-05 run chained two accounts to 100%
-   through `codex-auth` auto-switch with no human in the loop. Log the gate result every wave:
-   `fleet log <ledger> fleet.quota.gate engine=codex left=<N>% reserve=<R>% verdict=<ok|refused>`.
-2. **Worktree** (`superpowers:using-git-worktrees`): `git worktree add .claude/worktrees/<chunk> -b feat/<chunk> origin/main`
-   **then `bun install` (or the repo's install) in the new worktree** - fresh worktrees don't share the root
-   `node_modules`, and a pane may skip install → `Cannot find module @workbench/*` gate failures that look
-   like code bugs but aren't. Do it at the orchestrator before spawning, so the pane + your gates both resolve.
-3. **Spawn, engine-routed + NAMED, into the FLEET TAB.** At placement, bind the machine slug registered by
-   `fleetctl join --name <slug>` and keep both identities: local herdr name `<chunk-id>`; external/reporting
-   name `<slug>/<chunk-id>`. Spawn (0.8.0 two-step - see Herdr backchannel primitives): get a pane in the
-   fleet tab cwd'd at the worktree - the fleet tab's fresh root pane for the first chunk
-   (`tab create … --cwd <worktree>` returns the pane OBJECT `result.root_pane`; its id is `.result.root_pane.pane_id`), else `herdr pane split <a-fleet-tab-pane>
-   --direction down --cwd <worktree> --no-focus` - then `herdr agent start <chunk-id> --kind <kind>
-   --pane <pane_id> -- <engine args>` (`--kind` names the engine executable: claude|codex|grok|pi|…; the
-   argv after `--` is its flags only). For a non-primary machine, execute the same commands there:
-   `ssh <host> 'herdr pane split … && herdr agent start …'`.
-   The remote agent NAME is still the bare chunk id; append `fleet.resource.minted pane:<pane_id>` (and
-   `tab:<id>` for any tab you just created) plus `fleet.chunk.spawned` in this same wake (see 'Ledger +
-   state view'); set its local pane label too
-   (`ssh <host> 'herdr pane rename <pane_id> "▶ <chunk-id>"'` - see Sidebar legibility). Every later
-   remote read/prompt/wait/rename/close follows the same host-explicit SSH form. Never use `herdr --remote` for
-   driving; it is UI-attach only.
-   Placement hierarchy (once per fleet run, not per chunk) - all of it inside the run's own session, so
-   every command below is `herdr --session fleet-<epic> …` (remote: `ssh <host> 'herdr --session
-   fleet-<epic> …'`): **session = the fleet run** (Setup step 7) → **workspace = `<epic>`**: a fresh
-   session has NO workspaces, so mint one (`workspace create --cwd <repo> --label <epic>`; keep its id;
-   `fleet.resource.minted workspace:<id>`) → **one fleet tab per machine**: `tab create --workspace
-   <ws-id> --cwd <worktree> --label "fleet:<epic>" --no-focus` on primary, `"fleet:<epic>@<slug>"`
-   elsewhere (`fleet.resource.minted tab:<id>`). Keep its `tab_id`, and spawn EVERY chunk pane into
-   it. The human's default session is never touched - no 'tab 1' rule applies inside the fleet
-   session. `herdr tab rename` retrofits.
-   **Tab hygiene (live lesson - user caught both):** (a) run `herdr tab list --workspace <ws>` on the target
-   server (through SSH when remote) BEFORE creating; reuse the expected `fleet:<epic>` or
-   `fleet:<epic>@<slug>` tab instead of minting a duplicate; (b) `tab create` ships an empty root SHELL pane
-   (`.result.root_pane.pane_id` in the create response - `root_pane` is an object, not an id; probed 2026-09-03) - in 0.8.0 that root pane is the FIRST chunk's spawn target
-   (`agent start … --pane <root_pane>`), not waste; only close it when the tab pre-exists with agents and
-   the root shell sits empty. Sweep `herdr pane list --workspace <ws>` on the same target (no stray `shell`
-   panes in fleet tabs). Note a tab dies with its last pane - re-check `tab list` before reusing a stored id.
-   Engine per the **Engine routing** table above (+ any active user steering override from the ledger).
-   **ALWAYS pin `--model` explicitly** — a bare `claude` inherits the user's CURRENT default, which can change
-   mid-fleet (live lesson: user switched their default mid-run and the next pane silently ran on it; caught
-   only by reading the pane status line). **Codex panes have an extra, bounded launch gate:** after accepting
-   the trust modal, prove the unique argv-turn token appears in the **normalized** tail and substantive Codex
-   activity follows it while status is `working|idle|done`; `working` and the echoed prompt alone are only
-   boot activity, not proof that the brief ran. If the gate reaches its deadline, emit/ring `BOOT_HUNG` and
-   leave the pane intact — do not arm its waiter and never auto-kill it. Run the bundled verifier in
-   REFERENCE's “Codex pane launch protocol”. Pane spawned → emit `ASSIGNED`
-   (`fleetctl event ASSIGNED --machine <slug> --chunk <chunk-id> --epic <epic> --gist "spawned <engine>"`).
-4. **Brief.** For Codex, the argv pointer from the bounded verifier in step 3 is the first brief — do **not**
-   re-send it; wait for `BOOT_READY` before any later steering. For other panes, deliver with
-   `herdr agent prompt <chunk-id> "<pointer>"` (0.8.0: types AND submits in one call - the old
-   `agent send` + `send-keys Enter` dance is gone; verify the prompt line is EMPTY first, the append trap
-   in Hard rules still applies to a parked draft). **Brief-delivery gate (EVERY engine, not just codex -
-   live incident 2026-08-15: an orchestrator died mid-send and its freshly spawned pane sat at Ctx 0,
-   never briefed):** after delivering, confirm status flips to `working` (`agent prompt --wait --until
-   working` does this in one call); a pane still idle on an empty prompt got NO brief - re-deliver
-   (bounded, 2 tries) then ring. Never assume a sent brief arrived. A brief = **CONTEXT section** (varies per chunk:
-   spec/bug/repro/files/constraints — write it as richly as you like) + DISCIPLINE BLOCK
-   (fixed — copy it VERBATIM from REFERENCE.md, never freehand it)**. The block carries the whole chain:
-   PLAN first (`superpowers:writing-plans`) → BUILD via `superpowers:subagent-driven-development` (TDD) →
-   seam rule (point at `testing-anti-patterns.md`; a behavior-bearing chunk asserts the *observable effect
-   at the real seam*, e.g. the repo's `e2e-*.test.ts` /rpc pattern — the goal actually appears — NOT that a
-   mocked dispatch was called) → gates (CONCRETE commands, named: `bun run typecheck` 0,
-   `verify:effect` 0, suites green - never a meta "verify your work" line, see Opus-5-class alignment) →
-   **`git add -A ':!BRIEF.md' ':!REPORT.md' && git commit` before STOP, then report as
-   `<slug>/<chunk-id>` with the verified remote SHA, draft PR URL, and committed recovery record; leave ready status and merge to the coordinator** (uncommitted worktree = UNFINISHED to the waiter). Claude
-   panes get the skill NAMES (they
-   have the Skill tool); codex/pi panes get the non-Claude variant with the discipline spelled out as text.
-   **Live lesson (2026-07-02): a freehanded bug-fix brief had excellent context + a TDD sentence but never
-   told the pane to plan or use subagent-driven development — rich context is NOT the discipline; ANY chunk
-   shape (build, bug fix, refactor, spike) ends with the verbatim block.**
-   **Skill availability + command triggering (2026-07-16, workbox lesson): a brief NEVER loads a skill by
-   itself.** Skills resolve from the PANE's environment — `~/.claude/skills` of that machine+USER plus its
-   installed plugins — not from the orchestrator's. Before any brief names a skill: (a) **probe the target
-   env once per machine+user** (`ls ~/.claude/skills/<name>`; for a remote pane `ssh <target> 'ls
-   ~/.claude/skills'` — the pane user's home, not yours) and cache the result in the ledger; (b) a named
-   skill that's absent **silently degrades to prose** — the pane "sort of follows" the workflow with no
-   gates loaded, which reads as compliance and isn't — so on a miss either sync skills to the box first or
-   fall back to the non-Claude discipline variant (inline text works on every engine and every machine);
-   (c) to **force-trigger** a skill/command in a claude pane, send the slash command as its OWN message
-   (`agent prompt <chunk-id> "/skill-name <args>"`), never buried mid-paragraph, then `agent read`
-   and confirm the command/skill banner appears before sending the follow-up context; plugin-namespaced
-   skills (`superpowers:*`) additionally require that plugin installed under the pane's user — file-sync
-   alone never provides them. Plan approved (the pane's written plan lands; AWAITING-DECISION design
-   chunks: when the user's decision arrives) → emit `PLANNED`.
-5. **Arm waiter + monitor.** For Codex, do this only after the bounded past-boot launch gate succeeds. Run the
-   canonical background waiter from REFERENCE: `herdr agent wait <chunk-id> --timeout <ms>` (0.8.0: no
-   flag = fires on `idle|done|blocked`, the full terminal set) supplies bounded backpressure, then
-   `herdr agent get` payloads gate on `agent_status` in `idle|done` PLUS the commit-gate (a commit beyond
-   `origin/main` or a dirty tree - status alone is never completion); `blocked` wakes route to the
-   unblock path, not the gate. AND ensure the fleet **liveness monitor** loop is
-   running (it sweeps this pane for stuck/errored/dead).
-6. **Gate (you, fable/opus): CROSS-MODEL CONSENSUS (2026-07-10, user rule).** On idle, read the pane (its commit+report already emitted `BUILT` via the SIGNAL STEP; on READY_UNCOMMITTED you commit the pane's work and emit `BUILT` yourself), then three passes before your judgment:
-   a. **Cross-engine review** (dispatching it = emit `IN_REVIEW`)**:** the chunk's diff is reviewed by a DIFFERENT engine than built it - grok-built → `codex review`; codex-built → fable/opus adversarial review (grok is BUILD-only, it stalls on review workloads - the model-table rule, now consistent here). Reviewer instruction: report EVERY concrete finding with evidence, no severity self-filtering - the orchestrator triages. **An engine NEVER reviews its own work; a chunk NEVER self-approves.**
-   b. **Reuse/simplicity pass** on the same diff (either engine or fable): hand-rolled code that a shared package / the repo's package index already owns = must-fix; needless complexity = should-fix.
-   c. `/review-all` → **seam check** (the
-   `superpowers:requesting-code-review` task-reviewer rubric already asks *"tests verify real behavior, not
-   mocks?"* — enforce it; heuristic: *delete the mock — if the test still passes, it tests the mock, not the
-   code*; a behavior-bearing chunk with only mocked-dispatch tests is NOT done → send back) →
-   `superpowers:receiving-code-review` judgment → one fix subagent (`model:'sonnet'` - mechanical, findings
-   are its spec; escalate on a failed re-gate) for Critical/Important →
-   `superpowers:finishing-a-development-branch`.
-   **Merge gate = consensus:** merge only when the cross-engine reviewer has zero unresolved must-fix AND the
-   reuse pass is clean-or-fixed AND your judgment review passes. Builder-vs-reviewer disagreement → fable/opus
-   tiebreak, never a coin flip. Consensus pass → emit `GATED`. **Hold-tagged chunk: STOP here - the
-   Held-chunks flow (bell + the owner's board answer) owns the merge decision.** Untagged (the default):
-   merge **under the `main-merge` claim** - the ordered Merge-under-claim flow (claim/queue FIFO → rebase
-   on main → LOCAL repo-root gate → squash-merge → emit `MERGED` → release); never merge outside it.
-7. **Track + housekeep + FILE FOLLOW-UPS (2026-07-10, user rule).** Move the kanban card Todo→In Progress→Done; attach the PR. Append the chunk\u2019s decision line to the run map (see Run map). **Follow-up capture:** any concern a builder/reviewer/roaster raised that is NOT resolved within the chunk (fragile spot, "fix later", out-of-scope bug, deferred improvement) → file a repo issue labeled `follow-up` (title `[follow-up][<area>] <gist>`; body: source chunk, agent, what+why+suggested fix, severity) AT TRIAGE TIME, not batched, and link it from the card + run archive. **UAT capture (2026-07-22, user rule - repo contract in docs/playbooks/issue-labels.md):** any merged chunk whose behavior only a human on a real device/TestFlight build can confirm (widgets, Live Activities, push, entitlements, purchase flows, camera/mic, background modes, anything the dogfood pane cannot prove in sim) -> add concrete `- [ ]` verification steps + the PR link to the app's open `uat`-labeled issue, or create one (`--label uat --label device-verify`) when none is open; ONE `uat` issue per app per build window, extended not duplicated. The pre-ship human sweep is `gh issue list --label uat --state open` - a device-check ask that is not on a `uat` issue does not exist at build time. Sweeps: at every /review-all checkpoint scan recent chunk reports for un-filed concerns; before each final PR do a full-run sweep and list all follow-ups in the PR body under "Deferred concerns". Then **archive-then-close** the pane (see Housekeeping — NEVER close before archiving).
-8. **Dogfood (tracer-bullet).** After a runtime-affecting merge, when test panes are quiescent, spawn a
-   **sonnet-5** `dogfood` pane (drive-app-and-report is taste-floor work; opus-5 for reactor-subtle merges;
-   never fable - scoping/planning/review only per the 2026-07-12 steer): run the app, exercise the chunk's new
-   behavior + a core smoke, report → findings become **new kanban cards** linked to the chunk. Tracer
-   report received → emit `DOGFOODED` (the chunk's final lifecycle stage).
-9. **Fan out.** Spawn the next wave's *independent* chunks in parallel; sequence shared-file/reactor chunks.
-   Re-run the Codex weekly quota gate (step 1b) before EVERY wave, not once per run - the window moves while
-   panes work. A `QUOTA_HALT:` line from the monitor closes the codex lanes for the rest of the run: finish the
-   panes already working (they may still ROTATE), spawn no new codex pane, and record `BLOCKED: quota`.
-
-## Liveness monitor - the SECOND spine (waiters catch *done*; the monitor catches *stuck/errored/dead*)
-The idle-waiter only fires on `idle|done`. A pane that **errors** (network drop, `403 out of credits`, crash,
-connection-refused, rate-limit, model API 5xx), **freezes** mid-`working`, or flickers to `unknown` NEVER
-reaches idle → its waiter blocks to a **silent ~30-40 min TIMEOUT** and the chunk stalls invisibly while you
-think it's building. Waiters alone are blind to this - so run ONE wall-clock monitor loop for the WHOLE fleet,
-in parallel with the per-pane waiters. It RINGS; it does not auto-kill (classify via tail first - never kill a
-genuinely-`working` pane).
-1. **Sweep every ~2 min** (`run_in_background`, re-arming): `herdr agent list` → for each active fleet pane
-   snapshot `{status, normalized-tail fingerprint, commits-beyond-main, dirty, tokens}` (`tokens` from
-   `agent get` - `.limit` at or below `QUOTA_MIN` (default 10% left) = **QUOTA_LOW**: the monitor emits it
-   once and sends the pane `ROTATE NOW` while it can still write, so a handoff exists BEFORE the
-   `usage limit` error kills it; see Herdr backchannel primitives). The Codex WEEKLY window (`7d N%`) at or
-   below `FLEET_CODEX_RESERVE` (default 20% left) = **QUOTA_HALT**, emitted once per fleet: the orchestrator
-   spawns no further codex pane for the run (step 1b/9) - the reserve is the human's interactive budget.
-   Rotation keeps a pane alive; it never buys the fleet more budget) and diff vs the last snapshot in a state
-   file (survives orchestrator compaction - the monitor is stateless per wake, like the waiters).
-2. **ERRORED** - tail matches an error signature (list in REFERENCE monitor script). **Rung 0 is
-   AUTOMATED and already ran before you see it:** the pi.orchestrator plugin auto-retries transient
-   errors (API stall/mid-stream drop/429/5xx/overloaded) up to PI_ORCH_RETRY_MAX times per pane -
-   check its `state/events.jsonl` for `auto_retry`/`retry_exhausted`/`retry_fatal` records (2026-08-15,
-   built from the live 2h Opus stall + never-briefed child incident). Ring immediately ONLY for:
-   `retry_fatal` (quota/auth - needs respawn on a funded lane), `retry_exhausted`, or a signature the
-   plugin missed (`fleetctl attn <fleet-id> "<machine-slug>/<chunk-id> errored: <line>"` +
-   PushNotification on the user's Mac); don't wait out K sweeps.
-3. **STUCK** - status + normalized-tail fingerprint + commit-count ALL unchanged for K sweeps (~6-10 min)
-   while status ∉ `{idle,done}` → ring. The normalizer ignores only volatile terminal chrome (spinner elapsed
-   time, `esc to interrupt`, context-% footer), so a boot spinner now goes stale while real commands, logs,
-   model output, and errors still count as progress. Read the tail to classify: real long compile/suite
-   (re-arm, leave it) vs frozen (recover). A pane legitimately on a background shell shows *changing*
-   output/logs - a frozen one is inert.
-4. **DEAD/gone** - pane vanished from `agent list` (crashed / user closed) but its chunk isn't merged → ring +
-   re-spawn on the fallback engine in the SAME already-installed worktree.
-5. **Recover a caught pane** via the Hard-rules credits/frozen path: close the dead pane → re-spawn
-   grok→codex→fable/opus (ascending intelligence) in the same worktree → re-arm BOTH its waiter and the monitor.
-   A pane that died on a usage limit WITHOUT a handoff is rebuilt from its transcript on disk - follow
-   REFERENCE 'Dead-pane rescue' (`bun scripts/session-handoff.ts <pane>` renders the brief from the codex
-   rollout / claude project jsonl; successor in the same workspace; rename the corpse's tab MOVED).
-6. **Distinct from the idle-waiter, not a replacement.** Waiter = "did it finish?" (git-state gate). Monitor =
-   "is it still alive + progressing?" (liveness gate). Both run per active pane; a chunk is advanced only by the
-   waiter's DONE/READY, rescued only by the monitor's STUCK/ERRORED/DEAD. See REFERENCE 'Liveness monitor'.
-
-## Housekeeping — close done panes, KEEP their results (restorable)
-A pane's scrollback/result is LOST on `herdr pane close` (herdr has no transcript export; only the *session* persists, and even that is not guaranteed re-attachable after close). So **capture before you close**, into a git-tracked run archive — the durable, restorable record of what each agent actually did.
-
-Per chunk, right after merge (step 7), BEFORE closing:
-1. **Capture the pane's final report:** `herdr agent read <name> --source recent --lines 400` → the report text (files, commit, test summary, concerns).
-2. **Append to the run archive** (git-tracked → permanent, greppable, travels with the code): `docs/superpowers/fleet-runs/<epic>.md`, one section per chunk: `## <machine-slug>/<chunk-id>` + PR# + merge commit + gate verdict + test summary + the captured report + concerns. Commit it (part of the merge or a follow-up housekeeping commit). Link it on the kanban card.
-3. **Publish the branch** (`git push origin feat/<chunk>` from the pane's worktree, log `ref=` on the `built` event) - a branch that exists on one machine only is not durable, and a pane close or host failure must never remove the only copy of gated work. Workers maintain draft PRs; the coordinator owns ready status and merge.
-4. **THEN teardown:** `herdr --session fleet-<epic> pane close <pane_id>` (resolve id from the local bare name; use SSH when remote) + `fleet log <ledger> fleet.resource.closed pane:<pane_id>` → `git worktree remove` → `git branch -D` → **DerivedData sweep** (every Xcode build in a worktree mints a fresh `~/Library/Developer/Xcode/DerivedData/<App>-<hash>` dir, 5-9GB each; 80 leaked dirs = 394GB, live lesson 2026-07-17). Match by exact `WorkspacePath` inside the removed worktree - never by app-name pattern (concurrent fleets build the same app from other worktrees). See REFERENCE 'Archive a pane result before close' for the snippet. Last chunk of the run: rename the tab `fleet:<epic> ✓done` on primary or `fleet:<epic>@<slug> ✓done` on a non-primary machine (or close it).
-5. **Restore** later: read `docs/superpowers/fleet-runs/<epic>.md` (the authority) and render the ledger
-   (`fleet state docs/superpowers/fleet-runs/<epic>.jsonl`); use `herdr session attach fleet-<epic>` for
-   a local live re-entry, or `herdr --remote <host> --session fleet-<epic>` for remote UI attach WHILE the
-   session still exists (teardown deletes it); never use `--remote` to drive subcommands.
-**Archive-then-close applies to ALL fleet-spawned panes: review, dogfood, fix, and supervisor panes included, not just chunk panes** (live lesson 2026-07-10: a spent cross-review pane + a gated-out chunk pane lingered unclosed; the rule read as chunk-only). A review pane's verdict goes into the run archive under the chunk it reviewed.
-Do NOT let done panes pile up (they clutter the fleet tab + hold worktrees) — but never trade the result for the cleanup.
-**Close at VERIFIED REMOTE RECEIPT+REPORT, not at merge (2026-07-13, user rule — 11 idle panes piled up waiting out a long review queue).**
-A build pane's job ends when its branch and recovery record are pushed, its draft PR is current, and its report is captured; the WORKTREE + BRANCH are the durable
-artifacts the gate/merge needs — the pane is not. As soon as the waiter fires READY, verify the delivery receipt and archive the accepted result before closing the pane; run cross-review/gates against the worktree, and only tear down the
-worktree+branch after merge. Exception: a pane you expect to send back imminently (review already running, verdict
-minutes away) may stay for ONE gate cycle — a send-back to a closed pane costs a fresh spawn in the same worktree with
-the findings as the brief, which is acceptable and often cleaner (fresh context) than keeping N idle panes alive.
-Idle panes with no live job are a defect: every fleet-tab pane must be `working` or awaiting an imminent send-back.
-
-### Resource ledger + deterministic teardown (2026-07-16 — structure over sweep-rules)
-Empty tabs/panes kept surviving runs DESPITE sweep duty + archive-then-close: those rules live in
-orchestrator context and decay under compaction/rotation. Cleanup is therefore LEDGER-driven, never
-memory-driven — the same law that already governs worktrees ("housekeep only what THIS run created,
-tracked by exact path") extended to every herdr resource:
-- **Mint = record.** Every command that mints a herdr resource - the session, `workspace create`,
-  `tab create`, `pane split`, `agent start` - appends one event IN THE SAME wake, never batched:
-  `fleet log <ledger> fleet.resource.minted <session|workspace|tab|pane|agent>:<id> label=<label>`.
-  The empty root SHELL pane a `tab create` (and a `workspace create`) ships (`.result.root_pane.pane_id`) gets its own event until closed.
-  No minted event = not yours = you may not close it. Closing appends `fleet.resource.closed <same subject>`.
-- **Teardown reads the ledger, never the sidebar.** At run end (and before any rotation handoff):
-  `fleet teardown <ledger> --epic <epic> --session fleet-<epic>` (dry-run: every open
-  resource and its action), then add `--execute`. It archives-then-closes each pane by exact id, closes
-  tabs and workspaces, verifies no recorded pane survives, THEN `session stop` + `session delete`
-  fleet-<epic> - one stop removes every remaining surface - and appends `fleet.run.teardown closed=<n>`.
-  VERIFY: `herdr session list` no longer shows `fleet-<epic>`. `fleetctl deregister` only AFTER that.
-
-### Ledger + state view (2026-09-03 - the orchestrator reads ONE view, never scans panes)
-The ledger is `docs/superpowers/fleet-runs/<epic>.jsonl`: JSON Lines, one **CloudEvents 1.0** record per
-line (`specversion` `id` `source` `type` `time` `subject` `data`) - `jq`, DuckDB `read_json_auto`, and ax
-all read it without a custom parser. The tooling is `scripts/fleet.ts` (Effect 4, `effect/unstable/cli`);
-its `Herdr` service (`scripts/src/herdr/Herdr.ts`) is the seam: `HerdrCli` shells out to `herdr --session …`
-today, a `HerdrSdk` layer over `@herdr/sdk` replaces it when the SDK ships, nothing above changes. Never hand-write a line; `fleet log <ledger> <type>
-<subject|-> [key=value …]` mints id + time (ints and true/false are coerced, everything else is a string).
-`source` defaults to `fleet/<epic>/<host>`; set `FLEET_SOURCE=fleet/<epic>/<slug>` once per machine.
-
-**Epic mode (2026-09-04, spec `docs/specs/2026-09-04-fleet-graph-visibility-design.md`):** every `fleet` command also accepts an
-**epic directory** `<FLEET_HOME>/<epic>` (default home `~/.fleet/<repo>`, an orphan-branch worktree created with
-`fleet init <home> <epic> --repo <owner/name> --plan <path>`). The directory holds `graph.json` (chunks + deps +
-conflicts + lane + hold, plan-only; validate with `fleet graph check <dir>`), one `ledger.<slug>.jsonl` per machine, and
-`DECISIONS.md`. In epic mode `fleet log` REFUSES an illegal stage transition (exit 2, prints the allowed targets; `--force`
-with `reason=` overrides and records `forced=true`), an unknown chunk id (`--adhoc` overrides), an unknown `step=` for
-the stage (steps come from `scripts/workflow.json`), a bad `evidence=` (`verified|reported|asserted`), and `merged` on a
-held chunk without `hold=approved`. New views: `fleet next <dir>` (the frontier - the ONLY chunks a wave may spawn),
-`fleet status <dir> <chunk>` (put this line in every brief so the pane sees its stage, blockers, dependents, acceptance),
-`fleet stats <dir>` (dwell per lane/stage, retries, causes). `fleet state <dir>` groups chunks by depth and adds `step` and
-`blocked-by` columns. The single-file form `fleet <cmd> <ledger>.jsonl` still works unchanged for runs already in flight.
-
-**Safeguards + scheduling (2026-09-05, pstack learnings - `docs/research/pstack-fleet-ship-learnings.md`):** `fleet init`
-writes `"safeguards": true` and `"scheduling": {"max_in_flight": 4, "max_gate_queue": 2}` into `graph.json`; both are
-enforced by `fleet log` / `fleet next`, not by prose, and `src/ledger/safety.test.ts` + `src/run/scheduling.test.ts` are the
-crash tests. Untagged ledgers from older runs keep their old semantics.
-- **Attempt token.** `fleet log … fleet.chunk.building <slug>/<chunk>` mints `attempt_id` (the orchestrator does this, then
-  puts the token in the brief). Every later pane event (`built`, `in_review`, `gated`, `merged`) MUST carry
-  `attempt_id=<token>`; a missing, stale, or already-ended token is rejected with exit 2 - and rejected on REPLAY too
-  (`fleet state` prints `REJECTED <subject> event <id>: <reason>` in the header). A late `BUILT` from a replaced pane can no
-  longer overwrite the current attempt. A new `building` clears `hold`, `commit`, `checks`, `verdict`, `evidence`.
-- **Gate receipt bound to a commit.** `built` requires `commit=<full 40/64-hex sha>`. `gated` requires
-  `verdict=PASS evidence=verified checks=<receipt path> commit=<the built sha>`; anything else is exit 2, `--force` cannot
-  bypass it. Any later event with a different `commit=` drops the receipt (re-review). `merged` requires
-  `input_commit=<reviewed head sha>` that matches the receipt - the squash sha goes in `commit=`, the receipt attests the
-  reviewed input only. Before merging run `fleet check-gate <dir> <slug>/<chunk> --worktree <wt>`: exit 0 only when the
-  worktree is clean, `HEAD` equals the receipt commit, and a held chunk carries `hold=approved`.
-- **Rolling window.** `fleet next` counts `assigned` + active chunks against `max_in_flight` and `built|in_review|gated`
-  against `max_gate_queue`; over either limit the frontier is empty and the chunk row says why (`capacity`, `gate queue`).
-  `fleet log … assigned|spawned` re-checks the same view and refuses over-capacity spawns. Refill from `fleet next` when a
-  merge frees a slot; size the window by what YOU can gate + merge per wake, not by machine slots.
-- **Pilot.** Optional `"scheduling": {"pilot": "<chunk-id>"}` - a dependency-free, non-question chunk. Nothing else is
-  ready until the pilot reaches `dogfooded`. Use it on every run whose brief template, verify recipe, or chunk size is new.
-- **Freeze switch.** `fleet log <dir> fleet.policy.set spawn-paused text="<why>"` empties the frontier and blocks
-  `assigned|spawned` until `text=off`. Use it for a broken shared verifier or poisoned upstream; in-flight work finishes.
-- **Drain points.** Completion events are appended by panes and read at drain points only - after a merge, after a spawn
-  wave, after a review batch, before a human report. Never handle an arrival inline mid-merge.
-- **Publish before close.** A completed branch on one machine is not durable. Before `pane close`, push the branch
-  (`git push -u origin HEAD` from the task worktree) and log the verified remote SHA, draft PR, recovery record, and ref on the `built` event
-  (`ref=origin/feat/<chunk>`); a git bundle in shared storage is the fallback when the remote is unreachable.
-  `fleet status` shows `attempt_id`, gate commit, and checks so a pane can see what the gate will demand.
-
-Type vocabulary (all `fleet.*`, the writer rejects anything else):
-| type | subject | data |
-|---|---|---|
-| `run.started` · `run.teardown` | `<epic>` | `session` `runmap` `kanban` · `closed` |
-| `policy.set` | policy name (`routing`, `steer`, `lane-file`, `spawn-paused`) | `text` (`spawn-paused`: reason, or `off`) |
-| `resource.minted` · `resource.closed` | `session:`/`workspace:`/`tab:`/`pane:`/`agent:` + id | `label` |
-| `chunk.<stage>` (assigned spawned planned building built in_review gated merged dogfooded blocked error archived closed) | `<slug>/<chunk-id>` | `pane` `engine` `wt` `pr` `commit` `gist` - same keys `fleetctl event` posts; with safeguards also `attempt_id` (every pane event), `ref` (built), `verdict` `evidence` `checks` (gated), `input_commit` (merged) |
-| `attn.opened` · `attn.closed` | `<slug>/<chunk-id>` | `ask` |
-| `cursor.advanced` | `fleetboard` | `events` `signals` |
-| `note` | free | `text` |
-**The view:** `fleet state <ledger> --live [--session fleet-<epic>] [--tail N]`
-renders five blocks - header (epic, session, last action, malformed count, policies, cursor) · chunks
-(stage, pane, LIVE status, engine, PR, age, gist; stage = last `chunk.*` event per subject) · checklist
-(counts per stage + a `next:` line) · open items (attn, resources still minted) · live (orphan panes,
-gone panes) · action log tail. Without `--live` it is ledger-only and works with no server up. A
-malformed line is counted in the header and printed to stderr, never swallowed.
-**Protocol - two rules:** the FIRST command of every wake is the view with `--live`; the LAST command of
-every wake is one `fleet log` event. Read a pane tail only for a row the view flags (`gone`, `orphan`,
-`blocked`, `error`). The rotation handoff pastes the view verbatim as its state snapshot.
-**Commit cadence:** preserve ledger checkpoints on an owned coordination branch at each completed step and before parking. Push its recovery record and update the run draft PR before rotation or a provider stop. Never wait for a merge to preserve the only run record.
-- **Run wrap-up LAST (invoke the `wrap-up` skill).** Teardown closes herdr resources and the session; wrap-up closes the
-  RUN: one `follow-up`-labeled issue per unresolved concern in the run archive's REPORT sections (linked to
-  the chunk's PR), UAT checkboxes appended to the scope's open `uat` issue (TestFlight build numbers to
-  install, shipped flows to smoke on device, regressions to confirm dead - one live UAT issue per scope),
-  then the closed/filed/kept report into the run map's final comment. A fleet run is not done at
-  deregister - it is done when its loose ends are tickets and its human checks are queued.
-- **Exact ids only** — never pattern-match labels (`fleet:*`) to find things to close; concurrent
-  fleets share the namespace (same live lesson as the worktree cleanup regex).
-- **Rotation-safe:** the handoff doc carries the view's `open resources` block; the successor inherits the
-  teardown obligation with the resources and re-verifies them (`fleet state --live`) like every other
-  snapshot field.
-
-## Context hygiene (you, the orchestrator) - keep yourself clean + resumable
-Your state lives in the **ledger + kanban + git**, NOT your context. So you survive compaction and a fresh
-orchestrator can resume from those alone.
-- **Per wake, re-derive from sources of truth** - FIRST `fleet state <ledger> --live`
-  (one view: chunks, checklist, open items, orphans, action log), then `gh project item-list` and
-  `git log` only for what the view cannot answer - do NOT trust memory, and do NOT scan panes.
-- **Read pane *tails* only** (`agent read --lines 30`), never full transcripts. Never `cat` a subagent
-  `.output` transcript into context.
-- **Offload bulk to files:** diffs via `review-package`, pane reports + briefs as files, review verdicts
-  returned terse. Read the *verdict*, not the diff.
-- **Each wake is small + stateless:** render the view → gate (`/review-all`) → merge → move card → spawn
-  next → append one ledger event (`fleet log`) → done. Don't accumulate; the board + ledger are the memory.
-- **Prompt hygiene when parking (2026-07-10):** never leave unsubmitted draft text on your prompt line when
-  you yield/idle - supervisors and humans steer you through that line, and a watchdog that finds text there
-  must defer its message (live lesson: a starvation steering was correctly deferred for a full cycle because
-  the orchestrator parked with a half-typed draft). Submit or clear before yielding.
-- Spawn the *building* on panes; keep heavy reading/searching in **subagents** (they return conclusions,
-  not file dumps), so your window holds coordination only - and those dispatches are mechanical, so they
-  carry `model:'sonnet'` (`'haiku'` for pure locate), never the inherited orchestrator model.
-
-## Orchestrator rotation — proactive, not incident-driven (2026-07-16)
-Orchestrator main-loops were ~78% of a measured 2-week fleet spend (ax cost split) — cost per wake grows
-with window size, so cap the window by ROTATING on schedule instead of riding to auto-compact (research +
-sources: `docs/research/orchestrator-context-reduction.md` in the apps repo).
-- **Triggers (single-condition each, never ANDed — the 954k livelock came from conjoined preconditions):**
-  (a) ~70-75% of context window (leaves room to write the handoff BEFORE auto-compact can fire mid-handoff);
-  (b) 4-6h of active wakes as a hard wall-clock ceiling; (c) any rotation-blocking cause observed 2 cycles
-  in a row = incident, rotate now; (d) user says "rotate" — immediate.
-- **Rotation is ONE atomic instruction:** write the handoff doc + commit + push + update the draft PR + verify the delivery receipt + park with an empty prompt — never
-  a sequence a watchdog must observe from outside.
-- **Handoff = pointers + fresh query results, never narrative summary** (schema in REFERENCE.md). The
-  successor gets the same SOURCES the predecessor had (ledger path, kanban, agent list, event-log
-  cursor + fallback signals file,
-  steering overrides), not the predecessor's interpretation; the only prose section is Known-blockers.
-- **Successor protocol:** treat every snapshot field as stale — re-run the command behind it; reconcile
-  (orphan sweep) before spawning; re-arm waiters + monitor (process-local, never inherited); register on
-  fleetboard as a new instance; only then read Known-blockers.
-- Keep the handoff REFRESHED as part of parking (existing hard rule) so an unplanned death degrades into a
-  planned rotation.
-
-## Steward mode - on-demand per-machine orchestrator (skills#30; spec #24 + #6)
-A **steward** is this skill's orchestrator run ON a non-primary machine: spawned when the Mac
-orchestrator's scheduler assigns chunks to that machine (the steward is the assignment TARGET - the
-placement interface/algorithm stays on the Mac and out of scope here), gone when its queue empties.
-Idle machines run ONLY the heartbeat daemon - no idle steward stays resident.
-- **Division of labor (spec #6, exact):** the **Mac orchestrator keeps** wave planning, chunk-to-machine
-  placement, hold tagging, kanban/run-map upkeep, dogfood triggering, and the human interface. The
-  **steward runs the FULL fleet-ship workflow locally** on its own machine: worktrees, pane spawn/brief,
-  idle-waiters + the liveness monitor, the cross-model consensus gate (on its OWN machine, BEFORE
-  claiming), and the merge (under the `main-merge` claim like any orchestrator - the Merge-under-claim
-  flow, TTL'd + FIFO).
-- **Locality is the point:** waiters, monitor loops, and gates ALWAYS run on the steward's own machine -
-  NEVER held open over ssh (a held-open remote loop dies with the connection; that fragility is why
-  steward mode exists). ssh from the Mac stays for one-shot reads/spawns only. The monitor's "whole
-  fleet" scope reads per-machine in steward mode: each steward runs ONE monitor loop covering ITS panes.
-- **Events, not cards:** the steward emits the lifecycle stages it owns (`ASSIGNED → … → MERGED`, always
-  `--machine <slug>` - see Child→parent lifecycle events); `BUILT` is pane-pushed by the discipline
-  block's SIGNAL STEP, so the steward emits BUILT itself ONLY on `READY_UNCOMMITTED` (never a duplicate);
-  `DOGFOODED` stays Mac-emitted (dogfood triggering is a kept duty). The steward DOES file `follow-up`
-  issues at its own gate triage (its gate, its findings); but the Mac reconciles kanban cards + run map
-  from the event log on its wakes - a steward never edits cards or the map.
-- **Hold tags honored (skills#33):** the hold tag arrives in the chunk's queue entry at assignment. The
-  steward runs the held chunk's FULL workflow but follows Held chunks above: stop at `GATED`, bell with
-  `<slug>/<chunk-id>` + verdict + link, `✋` pending the owner's answer; merge (under claim) only on
-  approve, send back on reject. A chunk still awaiting its answer at rotation/exit is listed in the handoff.
-- **Rotation - same policy, VERBATIM:** the Orchestrator-rotation triggers above apply to stewards
-  unchanged (~70-75% context, 4-6h wall clock, 2 same-cause blocked cycles, user says rotate), and the
-  same successor protocol holds - the successor steward re-derives from the board + local herdr state.
-  ONE rotation policy; steward mode does not fork a second one.
-- **Exit-on-empty:** queue empty → ledger-driven teardown-verify (Resource ledger rules) → write the
-  rotation handoff (the REFERENCE schema, extended with machine slug + held-claim state) → confirm the
-  last chunk's terminal lifecycle event is on the board → `fleetctl deregister` → park/exit.
-- **Naming (#26 rules, unchanged):** local herdr names stay bare (`<chunk-id>`; the steward's own pane is
-  `steward:<epic>`), tab `fleet:<epic>@<slug>`, and EVERY off-machine surface - events, ledgers, reports,
-  attention/bell lines, archives, handoffs - says `<slug>/<chunk-id>`.
-Spawn-on-assign contract + brief template: REFERENCE.md 'Steward brief'.
-
-## Hard rules (live-dogfood lessons)
-- **One agent per worktree.** Map before spawning. **Never interrupt a `working` pane;** confirm an empty
-  prompt line before any `agent prompt`.
-- **Typed text APPENDS to whatever is on the prompt line (verified live 2026-07-17); NEVER prompt onto a
-  non-empty line.** The 2026-07-10 "replaces" reading was wrong: under append, steering a pane that holds
-  a parked draft CORRUPTS it by concatenation, which is what that incident actually showed. A bare
-  `send-keys Enter` on a human-typed parked draft still cannot be trusted to submit it; verify status flips
-  to `working` after EVERY submit, never assume. Correct parked-draft submit protocol (0.8.0 commands):
-  (1) `agent read` to capture + log the draft, (2) `agent send-keys <t> Ctrl+U`, then fresh-read to confirm
-  an empty prompt, (3) `agent prompt <t> "<full intended text>" --wait` and (4) confirm status flipped to
-  `working`. Only then send your own steering as the next message.
-- **The fleet never spends the Codex weekly reserve (2026-09-06, user rule).** Gate every codex spawn on the
-  weekly window (`7d N%` LEFT via `herdr agent get … .tokens.limit`, or the newest rollout's `rate_limits`);
-  N at or below `FLEET_CODEX_RESERVE` (default 20) refuses the spawn and the monitor's `QUOTA_HALT` closes the
-  codex lanes for the run. Rotation and account switching (`codex-auth` auto-switch) are NOT budget: on
-  2026-09-04/05 ~20 parallel codex panes plus max-effort tandem/chunk panes drained one Pro account, auto-switch
-  chained a second, and both hit 100% in 31h with no human decision. Never pin `max` effort on a fleet lane.
-- **Name everything locally; qualify everything externally.** `agent start <chunk-id>` — the herdr NAME is
-  the bare chunk id, unique only inside that server's own agent table (never generic like `codex`: detected
-  labels are also targets → ambiguous locally). ALL `herdr agent *` commands (get/read/prompt/wait/rename/
-  focus/attach) accept that bare local NAME. Pane id is required ONLY for `herdr pane *`
-  (send-text/send-keys/run/close/wait-output) — resolve on that server:
-  `herdr agent get <chunk-id> | jq -r .result.agent.pane_id`. Every reference that leaves the machine —
-  ledger, kanban card, run map, lifecycle/signal/monitor event, `fleetctl attn` line, run archive, rotation
-  handoff, and report to the human — MUST use `<machine-slug>/<chunk-id>`. Human reports say
-  `<machine-slug>/<chunk-id> (<pane_id>)`, never a bare name or pane id.
-- **There is no cross-host herdr namespace.** Two servers may both have a bare agent named `sdk-migrate`;
-  herdr detects no collision, so recording or driving bare `sdk-migrate` across machines can silently
-  attribute work to the wrong pane. Prevention is the pair above: qualify every off-machine reference, and
-  drive another server only as `ssh <host> 'herdr <subcommand> ...'`, with the host explicit at each call
-  site. Never point a local client at a remote socket or write `herdr --remote <host> agent ...`;
-  `--remote` only opens the interactive UI attach and is not composable with driving subcommands.
-- **Four-level placement: session=fleet run · workspace=`<epic>` · tab=machine · pane=chunk.** Every
-  fleet resource lives in the run's own herdr session `fleet-<epic>` (Setup step 7), never in the human's
-  default session - so no fleet pane can land in an interactive tab, and one `session stop` ends the run.
-  Inside it: one `<epic>` workspace, one `fleet:<epic>` tab on primary / `fleet:<epic>@<slug>` per
-  non-primary machine, bare-named chunk panes in that tab. Prefix EVERY driving command with
-  `--session fleet-<epic>`; the orchestrator's own pane is the only bare `herdr` target.
-  **Retrofit/moves (dogfooded on a LIVE working codex pane — survives untouched):** `herdr pane move <pane_id>
-  --tab <tab_id>` (existing tab) / `--new-tab --workspace <ws> --label TEXT` / `--new-workspace --label TEXT
-  --tab-label TEXT` (creates workspace+tab+moves in one command; use `--no-focus`). CRITICAL: the pane_id
-  CHANGES on move (wV:pC → w0:p1) but the agent NAME resolves seamlessly across it — one more reason waiters
-  and every reference must target the NAME; any pane-id-addressed waiter dies silently on a move (re-arm by
-  name).
-- **Idle != done — and `done`, not `idle`, is how panes often END.** Codex chunks finish in status `done` (terminal); gate on polled `agent get` payloads in `idle|done`, never `= idle` alone (else the waiter loops past a finished pane to TIMEOUT). 0.8.0 retired the old workaround: `agent wait <t>` with no flag matches `idle|done|blocked`, and `--until done` is a first-class target - but the STATUS is still only the wake, never the gate. A pane can finish **gated-green but uncommitted** → gate on stable-idle AND (commit OR dirty tree); on idle+dirty the orchestrator commits the pane's work itself (`READY_UNCOMMITTED`). See REFERENCE 'Refinement 2'.
-- **Idle != done (background-shell flap).** A pane reports idle/`done` while merely *holding on a background shell* (a test suite,
-  a forked review). Gate on a REAL signal: a **commit beyond `origin/main`** + a final report/STOP - not bare
-  idle. Make the waiter **commit-gated** (re-arm until a commit appears). Live lesson: a pane mid `+2292/-11510`
-  with the suite running flapped `idle`→`working`, storming the naive idle-waiter.
-- **Non-Claude panes miss repo conventions Claude Code auto-absorbs — point them at CLAUDE.md; the gate catches the rest.** Grok wrote
-  `import from "bun:test"` + `toStartWith` in a vitest repo: **typecheck + verify:effect PASSED**, but the
-  test file failed to load → 0 tests ran. So (a) name the repo's test framework + matcher set in the brief
-  (e.g. "vitest, import from 'vitest', no bun:test/toStartWith"); (b) the orchestrator's gate must
-  **actually run the new tests** - typecheck/verify alone pass over a non-loading or wrong-matcher test.
-- **Gate completeness: enumerate the FULL verification matrix, per chunk, from the plan (2026-07-10).** A gate
-  once ran only a boot test on a multi-scheme app and passed a chunk the plan gated on 4 schemes. The gate
-  step must LIST what the plan's phase names (every scheme, every suite, sim build, screenshots) and check
-  each off - "some test ran green" is not a gate.
-- **Liveness = branch commits, not board deltas (2026-07-10).** Any monitor/waiter/watchdog deciding
-  starved/stuck/unresponsive must check recent COMMITS on the fleet's branches before flagging - gh-closed
-  deltas batch behind gate queues (a watchdog false-alarmed 6x in one night on that signal alone; adding a
-  commits-alive check eliminated them).
-- **A safety protocol must have AUTHORITY to cause its own preconditions (2026-07-10 rotation livelock).**
-  The orchestrator context-rotation protocol required (fresh handoff) AND (idle + empty prompt) - the
-  watchdog could only wait for both, they never aligned, and a human had to rotate manually at 954k ctx.
-  When designing any monitor-triggered maneuver: every precondition needs either an action that CAUSES it
-  (submit the blocking draft after logging it; order "checkpoint + park empty" as ONE atomic instruction)
-  or a hard-ceiling override; freshness checks compare against content (newer than last state commit),
-  never wall-clock windows; and 2 consecutive same-cause blocked cycles = an incident, not patience.
-  Orchestrators: keep the handoff refreshed as part of PARKING, not as a favor when asked.
-- **Green != correct — enforce SEAM discipline (define_view dogfood lesson).** A chunk shipped 31 green unit
-  tests yet the feature hung in prod because they **mocked the dispatch (`CreateGoal`) — the behavior under
-  test**; "green" meant "called the mock." The rules already existed (`testing-anti-patterns.md` + both review
-  rubrics ask *"tests verify real behavior, not mocks?"*) — the miss was not wiring them into the fleet. So:
-  (a) every brief names the seam rule + points at `testing-anti-patterns.md`; (b) the gate runs the seam check
-  (delete-the-mock heuristic + task-reviewer rubric) and REJECTS behavior-bearing chunks whose tests mock their
-  own dispatch; (c) such chunks carry a real-seam acceptance assertion (mock only non-deterministic leaves).
-  UAT/dogfood is the backstop, not the primary catch.
-- **Never close a pane before archiving its result.** `close` is where the transcript dies (no herdr export; session-attach not guaranteed post-close). Capture `agent read --source recent` → the git-tracked run archive (`docs/superpowers/fleet-runs/<epic>.md`) FIRST, then close. The archive — not the live pane — is the restorable record.
-- **Housekeep ONLY worktrees THIS run created — never pattern-match names.** Same law for herdr panes/tabs - close from the ledger's `fleet.resource.minted` events (see Housekeeping: Resource ledger), never by label pattern. Track each worktree you `git worktree add` (by exact path) and remove only those. A broad `grep`/regex over `git worktree list` WILL catch other sessions' parked branches (live lesson: a cleanup regex removed byo-cloudflare/channels/fix-* worktrees from prior streams). Committed work survives on the branch (recreate with `git worktree add <path> <branch>`), but **uncommitted edits in someone's idle worktree are lost**. Before removing ANY worktree you didn't just create: confirm no live agent is cwd'd there AND it has no uncommitted changes (`git -C <wt> status --porcelain`).
-- **Orchestrator gates the merge** - panes never auto-merge to main (checkpoint + avoid collisions).
-- **Never brief `git add -A` while worktree-root scratch exists (live lesson - BRIEF.md/REPORT.md shipped to main twice).** Pane briefs and reports live at the worktree root; `add -A` commits them, the squash-merge lands them on main, and every later worktree "inherits" a stale brief. Fix: gitignore the scratch names (`/BRIEF.md`, `/REPORT.md`) in the repo once, AND write briefs with explicit `git add <paths>` or `git add -A ':!BRIEF.md' ':!REPORT.md'`. Gate check: the review diff must not contain the brief/report files.
-- **Long briefs travel as files, not keystrokes (2026-07-10 API-drop lessons).** Spawning/briefing with a
-  large prompt over `agent prompt` during API instability drops mid-stream and leaves half-briefed panes +
-  stale drafts. Write the brief to the worktree as BRIEF.md and SEND A SHORT POINTER ("read BRIEF.md and
-  execute"); same for any steering over ~10 lines.
-- **Waiter timeout != stuck: verify liveness before acting (2026-07-10).** Commit-gated waiters time out
-  under legitimately long chunks (a pane on task 8 with 8 commits got flagged twice). On waiter exit:
-  check pane status + recent commits FIRST; alive -> re-arm with a longer timeout (or require heartbeat
-  commits in the brief); only dead/commit-silent panes get the stuck treatment. An "API Error: Connection
-  closed mid-response" tail + clean worktree = RECOVERABLE mid-turn drop: nudge the same pane, don't respawn.
-- **A wrapper agent completing is NOT a review verdict (2026-07-10).** Review-wrapper subagents drop under
-  API instability and can return without a verdict; the gate must check a verdict EXISTS, and on wrapper
-  failure fall back to direct CLI (`codex review` / `grok` via Bash), logging the wrapper failure. Never
-  count a wrapper's clean exit as a PASS.
-- **Event-driven, not timed.** Canonical background waiters use `herdr agent wait` only for bounded
-  backpressure; polled `agent get` status plus git state is the completion gate. `send_later`/
-  `ScheduleWakeup` may be unavailable (no CCR session). If herdr can't track an engine's status, fall that
-  chunk back to one it can (codex/claude). **Engines run out of credits/quota mid-run** (grok hit a
-  `403: run out of credits`, pane frozen) - detect via a pane read, close the dead pane, and re-spawn the
-  chunk on a fallback engine (grok→codex→fable/opus, ascending intelligence) in the SAME already-installed worktree. Keep >1 lane funded.
-  **The idle-waiter will NOT catch a frozen/errored pane** (it never goes idle) - the **liveness monitor** (above) is the
-  proactive spine that catches it. Always run BOTH per active pane: the git-state waiter for *done*, the monitor for *stuck/errored/dead*.
-- **Parallelize only within a wave where chunks don't share files.** **Verify "already done" claims**
-  against current code before building (recent merges shift things).
-
-See [REFERENCE.md](REFERENCE.md) for brief templates, kanban `gh` commands, the waiter script, engine flags.
+Rotate proactively (same policy for stewards; `tandem` monitors `.result.agent.tokens.context` externally) on
+**any single trigger** (never ANDed): **(a)** ~70–75% context fill, **(b)** 4–6h active wakes (tandem triggers
+at 5h), **(c)** same rotation-blocking cause 2 cycles in a row, or **(d)** user says `"rotate"`. Execute as
+**one atomic step**: write the rotation handoff (`REFERENCE.md` schema pasting `fleet state --live`), commit +
+push + update draft PR + verify delivery receipt, and park with an empty prompt. Keep the handoff refreshed when
+parking; successors treat every snapshot line as stale, re-query live state, sweep orphans, re-arm
+waiters/monitor, and re-register on fleetboard.
