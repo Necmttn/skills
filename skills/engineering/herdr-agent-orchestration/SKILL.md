@@ -25,7 +25,7 @@ Every pane lives in a workspace, and workspaces belong to projects. Starting a p
 3. Create the pane there explicitly, then start the agent in it (0.8.0: `agent start` takes an EXISTING
    pane, not --cwd/--workspace): `herdr tab create --workspace <ID> --cwd <path> --label <text>` (use its
    `result.root_pane`) or `herdr pane split <pane-in-that-workspace> --cwd <path> --no-focus`, then
-   `herdr agent start <name> --kind <claude|codex|grok|pi|…> --pane <pane_id> -- <agent flags>`.
+   `herdr agent start <name> --kind <claude|codex|agy|…> --pane <pane_id> -- <agent flags>`.
 4. No matching workspace (new project, or an agent that needs isolation per the handoff flow)? Start one with a fresh label instead of squatting in an unrelated project's workspace.
 
 When a tab is involved, two more rules:
@@ -42,7 +42,7 @@ Never drive a `working` agent - you interrupt its turn. Wait first: `herdr agent
 
 Before every `prompt`, confirm the prompt line is EMPTY: dismiss rating and approval overlays, and clear any unsent text the user left typed (`agent send-keys <target> Ctrl+U`) - typed text appends, so stray text corrupts your command (verified live 2026-07-17). **Done when: a fresh `read` of the target shows idle with an empty prompt.**
 
-Backchannel primitives (probed 2026-08-15): every pane's env carries `HERDR_ENV=1`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH`, so a pane can always signal about itself (`herdr notification show "<title>" --sound request`, `herdr pane report-agent "$HERDR_PANE_ID" …` for shell panes). `herdr pane wait-output <pane_id> (--match TEXT|--regex PAT)` fires on matching output - but Claude Code ≥2.1.x collapses tool output, so screen sentinels do NOT work for claude panes; wake on `agent wait` status transitions instead. `herdr agent get <target>` exposes `.result.agent.tokens` (context fill + rate-limit window) - read it instead of scraping status footers. Install `herdr integration install claude codex grok pi` once per machine+user so panes report their real session identity.
+Backchannel primitives (probed 2026-08-15): every pane's env carries `HERDR_ENV=1`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH`, so a pane can always signal about itself (`herdr notification show "<title>" --sound request`, `herdr pane report-agent "$HERDR_PANE_ID" …` for shell panes). `herdr pane wait-output <pane_id> (--match TEXT|--regex PAT)` fires on matching output - but Claude Code ≥2.1.x collapses tool output, so screen sentinels do NOT work for claude panes; wake on `agent wait` status transitions instead. `herdr agent get <target>` exposes `.result.agent.tokens` (context fill + rate-limit window) - read it instead of scraping status footers. Install `herdr integration install <claude|codex|antigravity-cli>` once per machine+user so panes report their real session identity.
 
 ## Remote is the same socket
 
@@ -55,7 +55,7 @@ Move an agent's work to a fresh agent - a faster machine, a clean context, or a 
 1. **Confirm the source is idle.** A working agent has no stable state to hand off; wait or pick another.
 2. **Make the source write the handoff.** Send it: push its branch, write a handoff document at the repo root, open a GitHub issue whose body is that document, and reply with the issue URL. The document names the branch, the checkpoint commit, and the remaining work. **Done when: the issue URL is posted and the branch is pushed.**
 3. **Isolate the target checkout.** On the target, check out the handoff's branch. If another agent already occupies that repo, give this one its own `git worktree` - never two agents in one working tree.
-4. **Start the successor.** Create a pane cwd'd at the checkout in its **own labeled workspace** (one agent per workspace keeps sessions reviewable), then `herdr agent start <name> --kind <kind> --pane <pane_id> -- <agent flags>`. For an unattended run add the agent's bypass flag (codex: `--dangerously-bypass-approvals-and-sandbox`); clear the startup trust and hook prompts once it boots.
+4. **Start the successor.** Create a pane cwd'd at the checkout in its **own labeled workspace** (one agent per workspace keeps sessions reviewable), then `herdr agent start <name> --kind <kind> --pane <pane_id> -- <agent flags>`. For an unattended run add the agent's bypass flag (codex: `--yolo`, shell alias `xx`; claude: `--dangerously-skip-permissions`, shell alias `cc`; agy: `--dangerously-skip-permissions`, shell alias `aa`); clear the startup trust and hook prompts once it boots.
 5. **Hand it the goal.** Give the successor the handoff issue as a *tracked goal*, not a one-shot prompt - e.g. `/goal <objective referencing the issue and branch>`. **Done when: a `read` shows the successor pursuing the goal.**
 
 ## Gotchas
