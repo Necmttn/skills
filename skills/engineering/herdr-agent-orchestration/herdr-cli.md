@@ -17,7 +17,7 @@ Every command talks to the running herdr server over its socket. Prefix with `ss
 
 ## Lifecycle
 - Create the pane first: `herdr tab create --workspace <ID> --cwd <path> --label <text>` (agent goes into `result.root_pane`) or `herdr pane split <pane_id> --direction right|down --cwd <path> --no-focus`.
-- `herdr agent start <name> --kind <claude|codex|grok|pi|gemini|…> --pane <pane_id> [--timeout MS] -- <agent flags>` - start the engine in that pane; success = detected + ready for input.
+- `herdr agent start <name> --kind <claude|codex|agy|gemini|…> --pane <pane_id> [--timeout MS] -- <agent flags>` - start the engine in that pane; success = detected + ready for input.
 - `herdr pane close <pane_id>` - kill a pane (a tab dies with its last pane).
 - `herdr agent attach <target> [--takeover]` - attach your terminal to one agent.
 
@@ -25,7 +25,7 @@ Every command talks to the running herdr server over its socket. Prefix with `ss
 Env: `HERDR_ENV=1`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH` - a pane can always signal about itself:
 - `herdr notification show "<title>" [--body TEXT] [--sound done|request]` - toast the human.
 - `herdr pane report-agent "$HERDR_PANE_ID" --source <id> --agent <label> --state idle|working|blocked|unknown [--message TEXT]` - label a SHELL pane for `agent wait`/the sidebar. Cannot override a live agent pane's detected status.
-- `herdr integration install claude|codex|grok|pi|…` (once per machine+user) - engine hooks report real session identity; `herdr integration status` shows drift.
+- `herdr integration install <claude|codex|antigravity-cli|…>` (once per machine+user) - engine hooks report real session identity; `herdr integration status` shows drift.
 
 ## Sessions & remote
 - `herdr session list` / `herdr status` - server + session state.

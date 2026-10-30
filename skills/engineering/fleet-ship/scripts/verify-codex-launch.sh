@@ -8,9 +8,8 @@
 # Everything after <fleet-id> is passed straight through to codex BEFORE the argv
 # brief, so the caller supplies the lane's argv from ~/.ax/fleet-routing.json, e.g.
 #   verify-codex-launch.sh 019 "$WT" w22:t5 mac-necmttn/019 fleet-lockin-prelaunch \
-#     -c 'model_reasoning_effort="medium"'
-# Without it you inherit ~/.codex/config.toml (medium as of 2026-09-06, but it drifts) - always pin the lane's effort; never "max" on a fleet lane
-# on this machine - wasteful on clear-spec mechanical chunks.
+#     -m gpt-6.1-sol -c 'model_reasoning_effort="medium"'
+# Without it you inherit ~/.codex/config.toml (e.g. gpt-6.1-terra at low as of 2026-10-30, and it drifts) - always pin both -m and the lane's effort; never "max" on a fleet lane.
 
 set -uo pipefail
 

@@ -5,7 +5,7 @@
 import { Result, Schema } from "effect";
 
 export const ChunkKind = Schema.Literals(["impl", "verify", "gate", "question"]);
-export const Lane = Schema.Literals(["mechanical", "judgment", "design"]);
+export const Lane = Schema.Literals(["mechanical", "judgment", "design", "design-plan", "copy", "computer-use"]);
 
 export const Chunk = Schema.Struct({
   id: Schema.String,

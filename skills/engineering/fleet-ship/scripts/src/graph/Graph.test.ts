@@ -39,4 +39,18 @@ describe("parseGraph", () => {
     const r = parseGraph(JSON.stringify({ ...MIN, version: 2 }));
     expect(Result.isFailure(r)).toBe(true);
   });
+
+  test("accepts design-plan, copy, and computer-use lanes and rejects unknown lanes", () => {
+    const extended = {
+      ...MIN,
+      chunks: [
+        { id: "p1", title: "Plan", kind: "impl", lane: "design-plan", deps: [], acceptance: "approved" },
+        { id: "c1", title: "Copy", kind: "impl", lane: "copy", deps: ["p1"], acceptance: "reviewed" },
+        { id: "u1", title: "Sim QA", kind: "verify", lane: "computer-use", deps: ["c1"], acceptance: "smoke green" },
+      ],
+    };
+    expect(Result.isSuccess(parseGraph(JSON.stringify(extended)))).toBe(true);
+    const badLane = { ...MIN, chunks: [{ ...MIN.chunks[0], lane: "grok" }] };
+    expect(Result.isFailure(parseGraph(JSON.stringify(badLane)))).toBe(true);
+  });
 });

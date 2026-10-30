@@ -1,11 +1,11 @@
 ---
 name: improve-loop
-description: Burn surplus tokens into the backlog - a self-pacing loop that picks real tickets (follow-up issues, /improve plans, board cards), routes each to the cheapest engine that can ship it (codex/grok mechanical, fable/opus judgment), gates, and PRs until the budget or the backlog runs dry. Use when the user says "improve loop", "burn down the backlog", "I have extra tokens", "overnight improve", "+500k on the backlog", or "ship the follow-ups". Solo-session sibling of fleet-ship - no herdr panes; escalate to fleet-ship when many independent tickets are unblocked.
+description: Burn surplus tokens into the backlog - a self-pacing loop that picks real tickets (follow-up issues, /improve plans, board cards), routes each to the right engine from fleet-routing.json (GPT-6.1-Sol mechanical, Astra design plans, Argon copy, Terra computer-use, Opus 5.5 judgment), gates via cross-engine tandem review, and PRs until the budget or the backlog runs dry. Use when the user says "improve loop", "burn down the backlog", "I have extra tokens", "overnight improve", "+500k on the backlog", or "ship the follow-ups". Solo-session sibling of fleet-ship - no herdr panes; escalate to fleet-ship when many independent tickets are unblocked.
 ---
 
 # Improve Loop - surplus tokens → merged PRs
 
-One orchestrator (you, fable/opus), no panes. Each iteration ships ONE ticket end-to-end,
+One orchestrator (you, Opus 5.5 or Fable 5.1), no panes. Each iteration ships ONE ticket end-to-end,
 then re-checks budget and picks the next. The plan is the product; the executor is cheap.
 
 ## Sources (in order - first non-empty wins; user can name one)
@@ -38,15 +38,14 @@ and let the fleet's queue land it. Never race a fleet to main.
    ticket asks, nothing wider.
 2. **Worktree:** `git worktree add .claude/worktrees/<ticket> -b fix/<ticket> origin/main` +
    the repo's install (fresh worktrees don't share node_modules).
-3. **Route** (fleet-ship's lane table, solo form):
-   - mechanical / clear-spec → `codex exec` in the worktree via Bash (self-contained prompt,
+3. **Route** (`fleet-ship/fleet-routing.json`, solo form):
+   - mechanical / clear-spec (non-UI) → `codex exec --yolo -m gpt-6.1-sol -c 'model_reasoning_effort="medium"' "<brief>"` in the worktree via Bash (self-contained prompt,
      name the test framework: "vitest, import from 'vitest', never bun:test"), or a
-     `model:'sonnet', effort:'low'` Agent when codex is dry. Strictly ONE ticket in flight -
+     `model:'sonnet', effort:'low'` Agent when Codex is at weekly reserve. Strictly ONE ticket in flight -
      this loop is serial; wanting parallel lanes IS the fleet-ship escalation signal below.
-   - judgment / user-facing (taste ≥ 7) / reactor-subtle → do it yourself or `model:'opus'`.
+   - design / implementation plan → `codex exec --yolo -m gpt-6-astra -c 'model_reasoning_effort="high"' "<brief>"`; copy / human-touch prose → `agy --dangerously-skip-permissions --model gemini-4-argon-medium -p "<brief>"` (`-high` only for flagship positioning or sensitive comms); browser / simulator / GUI dogfood → `codex exec --yolo -m gpt-6.1-terra -c 'model_reasoning_effort="medium"' "<brief>"`; judgment / user-facing UI & public API / security / reactor-subtle → do it yourself on Opus 5.5 or dispatch `model:'opus'`.
    - NEVER stack "double-check your work" on a frontier executor; concrete gates only.
-4. **Gate** (you, never delegated): review the diff - cross-engine when codex/grok built it
-   (fable reviews codex work; grok never reviews). Reviewer instruction: report EVERYTHING,
+4. **Gate** (you, never delegated): run cross-engine tandem review per `fleet-routing.json` (`review` / `review-hard` lane: Argon-first `gemini-4-argon-medium`, fallback frontier `gpt-6-astra` or `claude-opus-5-5`/`claude-fable-5-1` from a different engine than the builder; never lightweight models). Reviewer instruction: report EVERYTHING,
    you triage severity after. Then the repo's real gates from the worktree: typecheck 0,
    `bun run test:vitest` green, new tests actually load and run (a wrong-framework test file
    passes typecheck and runs 0 tests).
