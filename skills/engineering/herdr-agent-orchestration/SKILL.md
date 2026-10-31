@@ -5,6 +5,8 @@ description: Drive and orchestrate the AI agents running inside herdr - read the
 
 # Orchestrating herdr agents
 
+For task completion, read [Required tandem review](references/tandem-review.md): a different engine reviews every task until consensus, and reviewers and delegated workers run in live Herdr panes, not headless CLI calls. For `aa`, Antigravity, or Argon launch details, read [Argon-first review](references/argon-review.md).
+
 Before assigning work, accepting completion, recovering a task, or closing a pane, read [durable-delivery.md](references/durable-delivery.md).
 It defines remote branches, draft PRs, checkpoints, delivery receipts, and recovery without a live pane.
 
@@ -25,7 +27,7 @@ Every pane lives in a workspace, and workspaces belong to projects. Starting a p
 3. Create the pane there explicitly, then start the agent in it (0.8.0: `agent start` takes an EXISTING
    pane, not --cwd/--workspace): `herdr tab create --workspace <ID> --cwd <path> --label <text>` (use its
    `result.root_pane`) or `herdr pane split <pane-in-that-workspace> --cwd <path> --no-focus`, then
-   `herdr agent start <name> --kind <claude|codex|grok|pi|…> --pane <pane_id> -- <agent flags>`.
+   `herdr agent start <name> --kind <claude|codex|agy|grok|pi|…> --pane <pane_id> -- <agent flags>`.
 4. No matching workspace (new project, or an agent that needs isolation per the handoff flow)? Start one with a fresh label instead of squatting in an unrelated project's workspace.
 
 When a tab is involved, two more rules:
