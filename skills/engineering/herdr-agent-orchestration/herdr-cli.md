@@ -17,7 +17,7 @@ Every command talks to the running herdr server over its socket. Prefix with `ss
 
 ## Lifecycle
 - Create the pane first: `herdr tab create --workspace <ID> --cwd <path> --label <text>` (agent goes into `result.root_pane`) or `herdr pane split <pane_id> --direction right|down --cwd <path> --no-focus`.
-- `herdr agent start <name> --kind <claude|codex|grok|pi|gemini|…> --pane <pane_id> [--timeout MS] -- <agent flags>` - start the engine in that pane; success = detected + ready for input.
+- `herdr agent start <name> --kind <claude|codex|agy|grok|pi|gemini|…> --pane <pane_id> [--timeout MS] -- <agent flags>` - start the engine in that pane; success = detected + ready for input.
 - `herdr pane close <pane_id>` - kill a pane (a tab dies with its last pane).
 - `herdr agent attach <target> [--takeover]` - attach your terminal to one agent.
 
